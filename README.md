@@ -11,18 +11,22 @@ descargas.
 ## Características
 
 - Interfaz gráfica (Tkinter) con tema **Oscuro / Claro**
-- Formatos: **AAC (.m4a) 128k** · **MP3 128/192/256/320k** · **FLAC** · **WAV** ·
-  **WMA 128k** · **AVI (sheiju 1.8" 128x160, MJPEG 16 fps + PCM 22050 Hz)**
+- Formatos: **AAC (.m4a) 96/128k** · **MP3 96/128/192/256/320k** · **FLAC** ·
+  **WAV** · **WMA 96/128k** · **AVI (sheiju 1.8" 128x160, MJPEG 16 fps +
+  PCM 22050 Hz)**
 - Calidad seleccionable por formato en un desplegable
-- Carpeta de destino configurable (se recuerda en `ajustes.json`)
+- **Playlists**: al pegar una URL con `list=` pregunta si bajar solo la
+  canción o la playlist completa, con un descanso de 2 s entre canciones
+- Guarda por defecto en tu carpeta **Música** de Windows, directamente y
+  sin subcarpetas por formato (carpeta cambiable, se recuerda en
+  `ajustes.json`)
 - Casilla para embeber **carátula, artista y álbum** (vía yt-dlp + mutagen)
-- **Cookies del navegador** (brave, chrome, firefox, edge, opera, etc.) para
-  videos con restricción de edad/sesión
 - **Estimación de tamaño** antes de descargar (por duración del video)
 - **Comprobador de calidad de carpeta** con ffprobe: lista bitrate, duración y
   tamaño de cada archivo y marca los de bitrate bajo
 - Barra de progreso con %, velocidad y tiempo restante + registro de actividad
-- Solo videos individuales: si la URL trae `list=`, la lista se ignora
+- La URL se limpia sola cuando la descarga sale bien; si falla, se conserva
+  para reintentar
 - Instalación 100% portable y sin admin: Python build standalone + yt-dlp +
   mutagen + FFmpeg (espejos rápidos de GitHub: GyanD y BtbN, con gyan.dev de
   reserva) en carpetas locales
@@ -35,10 +39,13 @@ descargas.
    base64).
 2. Doble clic. La primera vez descarga Python portátil (~42 MB), yt-dlp y
    FFmpeg (~90 MB) si no los tienes. Solo necesita internet esa primera vez.
-3. Pega la URL, elige formato/calidad y pulsa **Descargar y convertir**.
+3. Pega la URL, elige formato/calidad y pulsa **Descargar y convertir**. Si la
+   URL es una playlist, el programa te pregunta: **solo la canción**, la
+   **playlist completa** (pausa de 2 s entre canciones) o **cancelar**.
 
-Las descargas quedan en `%APPDATA%\MusikALAN\<FORMATO>\` (es decir,
-`C:\Users\TU_USUARIO\AppData\Roaming\MusikALAN`; carpeta cambiable).
+Las descargas quedan en tu carpeta **Música** (`C:\Users\TU_USUARIO\Music`),
+directamente y sin subcarpetas por formato (carpeta cambiable en la ventana).
+Si venías de la v2.2, el destino antiguo (`%APPDATA%\MusikALAN`) se migra solo.
 
 ## Formato AVI para reproductor sheiju 1.8"
 

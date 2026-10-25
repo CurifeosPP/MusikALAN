@@ -7,11 +7,11 @@ App de escritorio para descargar musica y videos de YouTube en formatos
 aptos para reproductores portatiles antiguos (tipo "sheiju" MP3 de 1.8"
 pulgadas y pantalla 128x160):
 
-  · AAC  (.m4a)  maximo 128 kbps
-  · MP3  (.mp3)  128 / 192 / 256 / 320 kbps (desplegable "Calidad")
+  · AAC  (.m4a)  96 / 128 kbps
+  · MP3  (.mp3)  96 / 128 / 192 / 256 / 320 kbps (desplegable "Calidad")
   · FLAC (.flac) sin perdida
   · WAV  (.wav)  sin perdida (archivos grandes)
-  · WMA  (.wma)  128 kbps (codificador wmav2 de FFmpeg; el contenedor
+  · WMA  (.wma)  96 / 128 kbps (codificador wmav2 de FFmpeg; el contenedor
                  ASF no admite caratula incrustada)
   · AVI  (.avi)  video recodificado para el reproductor sheiju 1.8"
                  128x160, con los parametros oficiales del repositorio
@@ -20,12 +20,15 @@ pulgadas y pantalla 128x160):
 
 La instalacion de Python, yt-dlp y FFmpeg la hace automaticamente el
 archivo DescargadorMusica.bat; este script es la ventana que se usa a
-diario (tema oscuro/claro, cookies del navegador, estimacion de tamano
-y comprobador de calidad de la carpeta).
+diario (tema oscuro/claro, estimacion de tamano y comprobador de
+calidad de la carpeta). La carpeta de guardado por defecto es la
+carpeta Musica de Windows, y los archivos van directos a ella, sin
+subcarpetas por formato.
 
 Uso:  python descargador.py   (o doble clic en DescargadorMusica.bat)
-Solo descarga videos individuales: si la URL trae lista de reproduccion,
-se ignora la lista y se baja unicamente el video pegado.
+Si la URL pertenece a una lista de reproduccion, el programa pregunta
+si bajar solo la cancion pegada o la playlist completa (con una pausa
+de 2 s entre canciones para no saturar a YouTube).
 """
 
 import json
@@ -36,12 +39,13 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.2'
+APP_V = '2.3'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -82,9 +86,41 @@ except Exception:
 
 
 # ---------------------------------------------------------------- ajustes
-def _destino_por_defecto():
+def _carpeta_musica():
+    """Carpeta 'Musica' real del usuario (FOLDERID_Music de Windows)."""
+    if os.name == 'nt':
+        try:
+            import ctypes
+
+            class _GUID(ctypes.Structure):
+                _fields_ = [('D1', ctypes.c_ulong), ('D2', ctypes.c_ushort),
+                            ('D3', ctypes.c_ushort),
+                            ('D4', ctypes.c_ubyte * 8)]
+
+            musica = _GUID(0x4BD8D571, 0x6D19, 0x48D3,
+                           (ctypes.c_ubyte * 8)(0xBE, 0x97, 0x03, 0x38,
+                                                0x5F, 0x7F, 0xC5, 0xCE))
+            ptr = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(
+                    ctypes.byref(musica), 0, None,
+                    ctypes.byref(ptr)) == 0 and ptr.value:
+                ruta = ptr.value
+                ctypes.windll.ole32.CoTaskMemFree(ptr)
+                return ruta
+        except Exception:
+            pass
+    return str(Path.home() / 'Music')
+
+
+def _destino_appdata_viejo():
+    """Carpeta del programa (era el destino por defecto en la v2.2)."""
     base = os.environ.get('APPDATA') or str(Path.home() / 'AppData' / 'Roaming')
     return str(Path(base) / 'MusikALAN')
+
+
+def _destino_por_defecto():
+    """Los archivos se guardan en la carpeta Musica del usuario."""
+    return _carpeta_musica()
 
 
 AJUSTES_DEFECTO = {
@@ -93,7 +129,6 @@ AJUSTES_DEFECTO = {
     'formato': 'AAC',
     'calidad': '128k',
     'embeber': True,
-    'navegador': '(ninguno)',
 }
 
 
@@ -103,11 +138,20 @@ def cargar_ajustes():
         a.update(json.loads(RUTA_AJUSTES.read_text(encoding='utf-8')))
     except Exception:
         pass
-    # migracion: la v2.0/2.1 guardaba por defecto Music/YTDownloader;
-    # si el destino guardado apunta ahi, se pasa a AppData\Roaming\MusikALAN
-    destino_viejo = str(a.get('destino') or '').replace('\\', '/').lower()
-    if 'ytdownloader' in destino_viejo:
+    a.pop('navegador', None)  # v2.2 o anterior: la seccion de cookies ya no existe
+    # migraciones del destino de guardado:
+    #  · v2.0/2.1 usaba Music/YTDownloader
+    #  · v2.2 usaba la carpeta del programa (AppData\Roaming\MusikALAN)
+    # Desde la v2.3 el destino por defecto es la carpeta Musica del usuario,
+    # asi que si el ajuste apunta a cualquiera de los dos, se actualiza.
+    destino = str(a.get('destino') or '').replace('\\', '/').rstrip('/').lower()
+    if 'ytdownloader' in destino:
         a['destino'] = AJUSTES_DEFECTO['destino']
+    else:
+        viejo = _destino_appdata_viejo().replace('\\', '/').rstrip('/').lower()
+        if destino and (destino == viejo
+                        or destino.startswith(viejo + '/')):
+            a['destino'] = AJUSTES_DEFECTO['destino']
     return a
 
 
@@ -159,6 +203,25 @@ def sin_playlist(url):
     except Exception:
         pass
     return url, False
+
+
+def es_url_playlist(url):
+    """True si la URL pertenece a una lista de reproducción (lleva list=)."""
+    try:
+        return 'list' in parse_qs(urlparse(url).query)
+    except Exception:
+        return False
+
+
+def es_solo_lista(url):
+    """True si la URL es una playlist pura, sin video individual (sin v=)."""
+    try:
+        p = urlparse(url)
+        if 'v' in parse_qs(p.query) or 'youtu.be' in (p.netloc or ''):
+            return False
+        return (p.path or '').rstrip('/').endswith('/playlist')
+    except Exception:
+        return False
 
 
 def abrir_carpeta(ruta):
@@ -221,9 +284,14 @@ class Registro:
     def debug(self, m):
         pass
 
+    # Avisos internos de yt-dlp que solo meten ruido en el registro:
+    AVISOS_RUIDOSOS = ('No supported JavaScript runtime', 'EJS')
+
     def warning(self, m):
         m = str(m).strip()
-        if m and self.log:
+        if not m or any(x in m for x in self.AVISOS_RUIDOSOS):
+            return
+        if self.log:
             self.log(m, 'aviso')
 
     def error(self, m):
@@ -245,17 +313,18 @@ NOMBRES_PP = {
 
 # ---------------------------------------------------------------- formatos
 FORMATOS = {
-    'AAC': dict(texto='AAC (.m4a)', carpeta='AAC', ext='m4a',
-                calidades=['128k'], defecto='128k'),
-    'MP3': dict(texto='MP3 (.mp3)', carpeta='MP3', ext='mp3',
-                calidades=['128k', '192k', '256k', '320k'], defecto='320k'),
-    'FLAC': dict(texto='FLAC (.flac)', carpeta='FLAC', ext='flac',
+    'AAC': dict(texto='AAC (.m4a)', ext='m4a',
+                calidades=['96k', '128k'], defecto='128k'),
+    'MP3': dict(texto='MP3 (.mp3)', ext='mp3',
+                calidades=['96k', '128k', '192k', '256k', '320k'],
+                defecto='320k'),
+    'FLAC': dict(texto='FLAC (.flac)', ext='flac',
                  calidades=['sin perdida'], defecto='sin perdida'),
-    'WAV': dict(texto='WAV (.wav)', carpeta='WAV', ext='wav',
+    'WAV': dict(texto='WAV (.wav)', ext='wav',
                 calidades=['sin perdida'], defecto='sin perdida'),
-    'WMA': dict(texto='WMA (.wma)', carpeta='WMA', ext='wma',
-                calidades=['128k'], defecto='128k'),
-    'AVI': dict(texto='AVI - sheiju 1.8" (128x160)', carpeta='AVI', ext='avi',
+    'WMA': dict(texto='WMA (.wma)', ext='wma',
+                calidades=['96k', '128k'], defecto='128k'),
+    'AVI': dict(texto='AVI - sheiju 1.8" (128x160)', ext='avi',
                 calidades=['128x160 · 16 fps'], defecto='128x160 · 16 fps'),
 }
 
@@ -263,7 +332,7 @@ FORMATOS = {
 # ---------------------------------------------------------------- progreso
 def hooks_gui(cola):
     """Crea los hooks de yt-dlp que publican eventos en la cola de la GUI."""
-    estado = {'titulo': False}
+    estado = {'titulo': False, 'pp_ult': None}
 
     def log(m, t='info'):
         cola.put(('log', m, t))
@@ -292,6 +361,7 @@ def hooks_gui(cola):
                 v = f'{fmt_tam(vel)}/s' if vel else ''
                 cola.put(('prog', None, f'{fmt_tam(done)} · {v}'))
         elif d['status'] == 'finished':
+            estado['pp_ult'] = None
             cola.put(('log', 'Descarga recibida. Procesando...', 'gris'))
             cola.put(('prog', 0, 'Procesando...'))
 
@@ -299,6 +369,9 @@ def hooks_gui(cola):
         if d['status'] == 'started':
             nom = (d.get('postprocessor_name')
                    or d.get('postprocessor') or 'Postproceso')
+            if nom == estado['pp_ult']:
+                return  # yt-dlp a veces anuncia el mismo paso dos veces
+            estado['pp_ult'] = nom
             texto = NOMBRES_PP.get(nom, nom) + '...'
             cola.put(('log', '→ ' + texto, 'gris'))
             cola.put(('prog', None, texto))
@@ -307,7 +380,7 @@ def hooks_gui(cola):
 
 
 # ---------------------------------------------------------------- opciones
-def opts_base(carpeta, cookies, cola):
+def opts_base(carpeta, cola):
     progreso, postproceso = hooks_gui(cola)
     o = {
         'outtmpl': str(carpeta / '%(title)s.%(ext)s'),
@@ -326,8 +399,6 @@ def opts_base(carpeta, cookies, cola):
         'progress_hooks': [progreso],
         'postprocessor_hooks': [postproceso],
     }
-    if cookies and cookies != '(ninguno)':
-        o['cookiesfrombrowser'] = (cookies,)
     if FFMPEG:
         o['ffmpeg_location'] = str(FFMPEG.parent)
     return o
@@ -382,13 +453,13 @@ def limpiar_miniaturas(carpeta, archivo):
 
 
 # ---------------------------------------------------------------- descargas
-def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cookies, cola):
+def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     """AAC (.m4a) / MP3 / FLAC / WAV vía postprocesadores de yt-dlp."""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
     fmt = FORMATOS[nombre_fmt]
-    carpeta = destino / fmt['carpeta']
+    carpeta = destino          # v2.3: sin subcarpetas por formato
     carpeta.mkdir(parents=True, exist_ok=True)
     codec = fmt['ext']
     con_portada = embeber and nombre_fmt in ('AAC', 'MP3', 'FLAC')
@@ -400,7 +471,7 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cookies, cola):
     if con_portada:
         pps.append({'key': 'EmbedThumbnail',
                     'already_have_thumbnail': False})
-    o = opts_base(carpeta, cookies, cola)
+    o = opts_base(carpeta, cola)
     o['format'] = 'bestaudio/best'
     o['postprocessors'] = pps
     o['writethumbnail'] = con_portada
@@ -412,18 +483,18 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cookies, cola):
     return info, archivo
 
 
-def descargar_wma(url, destino, embeber, cookies, cola):
-    """WMA 128 kbps: yt-dlp no soporta wma, así que se baja a WAV (con
+def descargar_wma(url, calidad, destino, embeber, cola):
+    """WMA 96/128 kbps: yt-dlp no soporta wma, así que se baja a WAV (con
     etiquetas) y luego FFmpeg recodifica a wmav2 dentro del .wma final.
     (El contenedor ASF de ffmpeg no soporta carátula incrustada.)"""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
-    carpeta = destino / 'WMA'
+    carpeta = destino          # v2.3: sin subcarpetas por formato
     tmp = carpeta / '_tmp'
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
-    o = opts_base(tmp, cookies, cola)
+    o = opts_base(tmp, cola)
     o['format'] = 'bestaudio/best'
     pps = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav',
             'preferredquality': '0'}]
@@ -446,8 +517,9 @@ def descargar_wma(url, destino, embeber, cookies, cola):
         meta += ['-metadata', 'album=YouTube']
     wma = carpeta / (limpiar_nombre(info.get('title') or 'audio') + '.wma')
     cmd = [str(FFMPEG), '-y', '-i', str(wav), '-vn',
-           '-c:a', 'wmav2', '-b:a', '128k'] + meta + [str(wma)]
-    ok = convertir_ffmpeg(cmd, 'Convirtiendo a WMA (wmav2 · 128 kbps)', cola)
+           '-c:a', 'wmav2', '-b:a', f'{calidad}k'] + meta + [str(wma)]
+    ok = convertir_ffmpeg(
+        cmd, f'Convirtiendo a WMA (wmav2 · {calidad} kbps)', cola)
     if not ok:
         raise RuntimeError('FFmpeg no pudo crear el archivo WMA.')
     shutil.rmtree(tmp, ignore_errors=True)
@@ -464,16 +536,16 @@ VF_SEGURO = ('scale=160:128:force_original_aspect_ratio=decrease,'
              'pad=160:128:(ow-iw)/2:(oh-ih)/2,transpose=2,vflip')
 
 
-def descargar_avi(url, destino, cookies, cola):
+def descargar_avi(url, destino, cola):
     """Video AVI para el reproductor sheiju 1.8" 128x160."""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
-    carpeta = destino / 'AVI'
+    carpeta = destino          # v2.3: sin subcarpetas por formato
     tmp = carpeta / '_tmp'
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
-    o = opts_base(tmp, cookies, cola)
+    o = opts_base(tmp, cola)
     # Para una pantalla de 128x160 basta con 480p: ahorra mucha descarga.
     o['format'] = ('best[height<=480][ext=mp4]/best[height<=480]/'
                    'bv*[height<=480]+ba/b')
@@ -515,8 +587,10 @@ KBPS_ESTIMADOS = {
 
 def estimar_bytes(duracion_s, formato, calidad, embeber):
     """Estima el tamaño final en bytes (cálculo puro, testeable)."""
-    if formato == 'MP3':
-        kbps = int(re.sub(r'[^0-9]', '', str(calidad)) or 320)
+    if formato in ('MP3', 'AAC', 'WMA'):
+        kbps = int(re.sub(r'[^0-9]', '', str(calidad)) or 0)
+        if not kbps:
+            kbps = KBPS_ESTIMADOS.get(formato, 128)
     else:
         kbps = KBPS_ESTIMADOS.get(formato, 128)
     extra = 120_000 if (embeber and formato in ('AAC', 'MP3', 'FLAC')) else 0
@@ -539,14 +613,14 @@ def clase_calidad(ext, kbps):
     if ext == '.m4a':
         if kbps >= 115:
             return 'Excelente (AAC ≤128k)', 0
-        if kbps >= 80:
-            return 'Buena', 1
+        if kbps >= 82:
+            return '96 kbps', 1
         return f'{kbps} kbps (baja)', 2
     if ext == '.wma':
         if kbps >= 115:
             return '128 kbps', 0
-        if kbps >= 90:
-            return 'Aceptable', 1
+        if kbps >= 88:
+            return '96 kbps', 1
         return f'{kbps} kbps (baja)', 2
     if ext in ('.flac', '.wav'):
         return 'Sin pérdida', 0
@@ -574,9 +648,6 @@ TEMAS = {
         ok='#1e7e34', error='#c62828', aviso='#9a6700', trough='#dfe1e4',
         placeholder='#9aa0a6'),
 }
-
-NAVEGADORES = ['(ninguno)', 'brave', 'chrome', 'chromium', 'edge', 'firefox',
-               'opera', 'opera_gx', 'safari', 'vivaldi', 'whale']
 
 PLACEHOLDER_URL = 'https://www.youtube.com/watch?v=...'
 
@@ -695,28 +766,10 @@ if TK_OK:
             self.chk_embeber.grid(row=3, column=0, columnspan=2,
                                   sticky='ew', padx=8, pady=(2, 6))
 
-            # --- grupo: cookies -------------------------------------------
-            gc = tk.LabelFrame(
-                marco, text='Navegador para cookies (solo si es necesario)',
-                font=FUENTE_UI, relief='solid', bd=1)
-            gc.grid(row=3, column=0, sticky='ew', pady=5)
-            self._wg['gc'] = gc
-            self._wg['lbl_nav'] = tk.Label(gc, text='Navegador:',
-                                          font=FUENTE_UI)
-            self._wg['lbl_nav'].pack(side='left', padx=8, pady=8)
-            self.cmb_navegador = ttk.Combobox(
-                gc, values=NAVEGADORES, state='readonly', width=12,
-                font=FUENTE_UI, style='gx.TCombobox')
-            nav = AJUSTES.get('navegador', '(ninguno)')
-            if nav not in NAVEGADORES:
-                nav = '(ninguno)'
-            self.cmb_navegador.set(nav)
-            self.cmb_navegador.pack(side='left', padx=(8, 0), ipady=2)
-
             # --- grupo: estimación ----------------------------------------
             ge = tk.LabelFrame(marco, text='Estimación', font=FUENTE_UI,
                                relief='solid', bd=1)
-            ge.grid(row=4, column=0, sticky='ew', pady=5)
+            ge.grid(row=3, column=0, sticky='ew', pady=5)
             self._wg['ge'] = ge
             ge.columnconfigure(0, weight=1)
             self.lbl_estimacion = tk.Label(
@@ -733,26 +786,26 @@ if TK_OK:
             self.btn_descargar = self._boton(marco, 'Descargar y convertir',
                                              self._accion_descargar,
                                              fuente=FUENTE_BTN_G, alto=2)
-            self.btn_descargar.grid(row=5, column=0, sticky='ew', pady=(7, 4))
+            self.btn_descargar.grid(row=4, column=0, sticky='ew', pady=(7, 4))
             self.btn_comprobar = self._boton(
                 marco, 'Comprobar calidad de la carpeta',
                 self._accion_comprobar, fuente=FUENTE_BTN)
-            self.btn_comprobar.grid(row=6, column=0, sticky='ew', pady=3)
+            self.btn_comprobar.grid(row=5, column=0, sticky='ew', pady=3)
 
             # --- estado + barra de progreso --------------------------------
             self.lbl_estado = tk.Label(marco, text='', font=FUENTE_UI,
                                        anchor='w')
-            self.lbl_estado.grid(row=7, column=0, sticky='ew', pady=(4, 0))
+            self.lbl_estado.grid(row=6, column=0, sticky='ew', pady=(4, 0))
             self.barra = ttk.Progressbar(
                 marco, maximum=100, style='gx.Horizontal.TProgressbar')
-            self.barra.grid(row=8, column=0, sticky='ew', pady=(2, 4))
+            self.barra.grid(row=7, column=0, sticky='ew', pady=(2, 4))
 
             # --- registro (log) --------------------------------------------
             self.txt_log = ScrolledText(marco, font=FUENTE_LOG, height=12,
                                         relief='flat', bd=0, wrap='word',
                                         state='disabled')
-            self.txt_log.grid(row=9, column=0, sticky='nsew')
-            marco.rowconfigure(9, weight=1)
+            self.txt_log.grid(row=8, column=0, sticky='nsew')
+            marco.rowconfigure(8, weight=1)
             for tag, conf in (
                     ('info', {}),
                     ('gris', {}),
@@ -793,17 +846,23 @@ if TK_OK:
             self.ent_url.delete(0, 'end')
             self.ent_url.focus_set()
 
+        def _reset_url(self):
+            """Deja el campo de URL vacío con su placeholder (tras un éxito)."""
+            self.ent_url.delete(0, 'end')
+            self._en_placeholder = True
+            self._poner_placeholder()
+            self._refrescar_placeholder()
+
         # ------------------------------------------------ tema
         def _aplicar_tema(self):
             t = TEMAS[self._tema_actual]
             w = self._wg
             self.configure(bg=t['fondo'])
-            for nombre in ('marco', 'f0', 'gu', 'gf', 'fc', 'gc', 'ge'):
+            for nombre in ('marco', 'f0', 'gu', 'gf', 'fc', 'ge'):
                 w[nombre].configure(bg=t['fondo'])
-            for lf in (w['gu'], w['gf'], w['gc'], w['ge']):
+            for lf in (w['gu'], w['gf'], w['ge']):
                 lf.configure(bg=t['fondo'], fg=t['texto2'])
-            for nombre in ('lbl_tema', 'lbl_fmt', 'lbl_cal', 'lbl_car',
-                           'lbl_nav'):
+            for nombre in ('lbl_tema', 'lbl_fmt', 'lbl_cal', 'lbl_car'):
                 w[nombre].configure(bg=t['fondo'], fg=t['texto'])
             self.lbl_estimacion.configure(bg=t['fondo'], fg=t['texto'])
             self.lbl_estado.configure(bg=t['fondo'], fg=t['texto2'])
@@ -867,8 +926,6 @@ if TK_OK:
             self.cmb_tema.bind('<<ComboboxSelected>>', self._on_tema)
             self.cmb_formato.bind('<<ComboboxSelected>>', self._on_formato)
             self.cmb_calidad.bind('<<ComboboxSelected>>', lambda e: self._guardar())
-            self.cmb_navegador.bind('<<ComboboxSelected>>',
-                                    lambda e: self._guardar())
             self.chk_embeber.configure(command=self._guardar)
             self.ent_url.bind('<FocusIn>', self._on_focus_url_in)
             self.ent_url.bind('<FocusOut>', self._on_focus_url_out)
@@ -926,7 +983,6 @@ if TK_OK:
             AJUSTES['formato'] = self._fmt_actual()
             AJUSTES['calidad'] = self.cmb_calidad.get()
             AJUSTES['embeber'] = bool(self.var_embeber.get())
-            AJUSTES['navegador'] = self.cmb_navegador.get()
             AJUSTES['destino'] = self.ent_carpeta.get().strip()
             guardar_ajustes()
 
@@ -1043,6 +1099,8 @@ if TK_OK:
             self.barra.configure(value=0)
             if tipo == 'descarga' and ok:
                 self.lbl_estado.configure(text='Listo.')
+                # La descarga fue bien: se limpia la URL para la siguiente.
+                self._reset_url()
             elif not ok:
                 self.lbl_estado.configure(text='Terminado con errores.')
                 if tipo == 'descarga':
@@ -1065,10 +1123,8 @@ if TK_OK:
                     self._log('Eso no parece una URL (debe empezar por '
                               'http:// o https://)', 'error')
                     return None
-            u, cambio = sin_playlist(u)
-            if cambio:
-                self._log('(se ignorará la lista de reproducción: '
-                          'modo solo video)', 'gris')
+            # OJO: aquí NO se quita list=; si la URL trae una playlist,
+            # _accion_descargar preguntará qué hacer con ella.
             return u
 
         def _accion_estimar(self):
@@ -1086,7 +1142,26 @@ if TK_OK:
             if not url:
                 return
             self._guardar()
-            cfg = {'url': url}
+            playlist = False
+            if es_url_playlist(url):
+                r = messagebox.askyesnocancel(
+                    'MusikALAN — lista de reproducción',
+                    'Esta URL pertenece a una lista de reproducción.\n\n'
+                    '  SÍ  →  descargar la playlist completa\n'
+                    '         (pausa de 2 s entre canciones)\n'
+                    '  NO  →  descargar solo esta canción\n'
+                    '  Cancelar  →  no descargar nada')
+                if r is None:
+                    self._log('Descarga cancelada.', 'gris')
+                    return
+                if r:
+                    playlist = True
+                elif es_solo_lista(url):
+                    # Es una playlist pura: no hay "una canción" ahí
+                    self._log('Esa URL es una lista completa; se descargará '
+                              'entera.', 'aviso')
+                    playlist = True
+            cfg = {'url': url, 'playlist': playlist}
             self._iniciar(self._hilo_descargar, cfg, 'Descargando...')
 
         def _accion_comprobar(self):
@@ -1117,9 +1192,9 @@ if TK_OK:
                 log('Obteniendo información del video...', 'gris')
                 o = {'quiet': True, 'no_warnings': True, 'noplaylist': True,
                      'socket_timeout': 30, 'logger': REGISTRO}
-                nav = AJUSTES.get('navegador', '(ninguno)')
-                if nav != '(ninguno)':
-                    o['cookiesfrombrowser'] = (nav,)
+                if es_url_playlist(cfg['url']):
+                    log('(la URL contiene una playlist: la estimación es '
+                        'solo del video pegado)', 'gris')
                 with YT_DLP.YoutubeDL(o) as ydl:
                     info = ydl.extract_info(cfg['url'], download=False)
                 dur = info.get('duration')
@@ -1149,6 +1224,77 @@ if TK_OK:
         def _fmt_actual_solo(self, clave):
             return clave if clave in FORMATOS else 'AAC'
 
+        def _descargar_una(self, url, clave, calidad_arg, embeber, destino,
+                           cola):
+            """Descarga y convierte UNA URL. Devuelve el Path final o None."""
+            if clave == 'WMA':
+                return descargar_wma(url, calidad_arg, destino, embeber,
+                                     cola)[1]
+            if clave == 'AVI':
+                return descargar_avi(url, destino, cola)[1]
+            return descargar_audio(url, clave, calidad_arg, destino, embeber,
+                                   cola)[1]
+
+        def _descargar_playlist(self, url, clave, calidad_arg, embeber,
+                                destino, cola):
+            """Baja una lista entera, con 2 s de descanso entre canciones
+            para no saturar a YouTube. Devuelve (descargadas, total)."""
+            def log(m, t='info'):
+                cola.put(('log', m, t))
+
+            log('Leyendo la lista de reproducción...', 'gris')
+            o = {'quiet': True, 'no_warnings': True,
+                 'extract_flat': 'in_playlist', 'socket_timeout': 30,
+                 'logger': REGISTRO}
+            with YT_DLP.YoutubeDL(o) as ydl:
+                info = ydl.extract_info(url, download=False)
+            entradas = list(info.get('entries') or [])
+            if not entradas:
+                log('No se vio ninguna canción en la lista; se intenta '
+                    'como video suelto.', 'aviso')
+                archivo = self._descargar_una(sin_playlist(url)[0], clave,
+                                              calidad_arg, embeber, destino,
+                                              cola)
+                return (1 if archivo else 0), 1
+            titulo_pl = str(info.get('title') or 'lista')[:70]
+            total = len(entradas)
+            log(f'Playlist «{titulo_pl}» — {total} vídeo(s).', 'titulo')
+            okas = 0
+            fallos = []
+            for i, e in enumerate(entradas):
+                u = str(e.get('webpage_url') or e.get('url') or '')
+                if u and not u.startswith('http'):
+                    u = 'https://www.youtube.com/watch?v=' + u
+                if not u and e.get('id'):
+                    u = 'https://www.youtube.com/watch?v=' + str(e['id'])
+                tit = str(e.get('title') or u or '?')[:70]
+                if i:
+                    time.sleep(2)   # descanso entre canciones
+                log(f'[{i + 1}/{total}] ♪ {tit}', 'titulo')
+                try:
+                    archivo = self._descargar_una(u, clave, calidad_arg,
+                                                  embeber, destino, cola)
+                except Exception as e2:
+                    archivo = None
+                    log(f'✖ [{i + 1}/{total}] Falló: {self._msg_error(e2)}',
+                        'error')
+                if archivo and Path(archivo).exists():
+                    try:
+                        tam = fmt_tam(Path(archivo).stat().st_size)
+                    except OSError:
+                        tam = '?'
+                    log(f'   ✔ {Path(archivo).name}  ({tam})', 'ok')
+                    okas += 1
+                else:
+                    fallos.append(tit)
+            log(f'Playlist terminada: {okas} de {total} descargada(s).',
+                'ok' if not fallos else 'aviso')
+            if fallos:
+                log('Sin descargar: '
+                    + ' · '.join(f[:40] for f in fallos[:8])
+                    + ('...' if len(fallos) > 8 else ''), 'gris')
+            return okas, total
+
         def _hilo_descargar(self, cfg):
             cola = self.cola
 
@@ -1159,23 +1305,37 @@ if TK_OK:
             clave = self._fmt_actual_solo(AJUSTES.get('formato', 'AAC'))
             calidad = AJUSTES.get('calidad', '128k')
             embeber = bool(AJUSTES.get('embeber', True))
-            nav = AJUSTES.get('navegador', '(ninguno)')
             destino = Path(os.path.expandvars(
                 str(AJUSTES.get('destino', _destino_por_defecto()))))
             try:
+                if YT_DLP is None:
+                    log('yt-dlp no está instalado. Ejecuta '
+                        'DescargadorMusica.bat para instalarlo.', 'error')
+                    cola.put(('fin', 'descarga', False,
+                              'yt-dlp no está instalado.'))
+                    return
                 destino.mkdir(parents=True, exist_ok=True)
-                calidad_arg = {'AAC': '128', 'FLAC': '0',
-                               'WAV': '0'}.get(clave) or \
-                    re.sub(r'[^0-9]', '', calidad) or '320'
-                if clave == 'WMA':
-                    info, archivo = descargar_wma(url, destino, embeber,
-                                                  nav, cola)
-                elif clave == 'AVI':
-                    info, archivo = descargar_avi(url, destino, nav, cola)
+                if clave in ('FLAC', 'WAV'):
+                    calidad_arg = '0'
                 else:
-                    info, archivo = descargar_audio(url, clave, calidad_arg,
-                                                    destino, embeber, nav,
-                                                    cola)
+                    calidad_arg = (re.sub(r'[^0-9]', '', str(calidad))
+                                   or ('128' if clave == 'AAC' else '320'))
+                if cfg.get('playlist'):
+                    okas, total = self._descargar_playlist(
+                        url, clave, calidad_arg, embeber, destino, cola)
+                    if okas and okas == total:
+                        log(f'Carpeta: {destino}', 'gris')
+                        cola.put(('fin', 'descarga', True, ''))
+                    else:
+                        cola.put((
+                            'fin', 'descarga', False,
+                            f'Se descargaron {okas} de {total} de la '
+                            'playlist. La URL no se ha borrado por si '
+                            'quieres reintentarlo.'))
+                    return
+                archivo = self._descargar_una(sin_playlist(url)[0], clave,
+                                              calidad_arg, embeber, destino,
+                                              cola)
                 if archivo and Path(archivo).exists():
                     archivo = Path(archivo)
                     try:
@@ -1308,8 +1468,7 @@ if TK_OK:
 
         # ------------------------------------------------ arranque
         def _arranque(self):
-            self._log(f'MusikALAN v{APP_V} — '
-                      'YouTube Downloader', 'titulo')
+            self._log(f'MusikALAN v{APP_V}', 'titulo')
             self._log('Ctrl+U: actualizar yt-dlp · Ctrl+L: limpiar registro',
                       'gris')
             threading.Thread(target=self._hilo_version, daemon=True).start()
