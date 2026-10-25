@@ -1,0 +1,149 @@
+══════════════════════════════════════════════════════════════════
+  DESCARGADOR DE MÚSICA v2.0  —  YouTube Downloader (ventana)
+                  AAC · MP3 · FLAC · WAV · WMA
+                  AVI para sheiju 1.8" 128x160
+══════════════════════════════════════════════════════════════════
+
+QUÉ ES
+------
+Un solo archivo (DescargadorMusica.bat) que lo hace todo: instala lo
+que falte (Python, yt-dlp, mutagen y FFmpeg, en modo portable y SIN
+permisos de administrador) y luego abre la ventana "YouTube
+Downloader": una interfaz gráfica con tema oscuro, desplegables de
+formato y calidad, cookies de navegador, estimación de tamaño, barra
+de progreso y registro de actividad.
+
+Cómo compartirlo: envía SOLO DescargadorMusica.bat por WhatsApp,
+Telegram, Drive, USB, etc. Cada amigo lo guarda en SU propia carpeta
+(ej.: C:\Descargas\Descargador\) y hace doble clic. Nada más.
+
+
+CÓMO SE USA
+-----------
+1. Guarda DescargadorMusica.bat en una carpeta propia (no dentro de
+   Archivos de Programa, y mejor fuera de OneDrive).
+2. Doble clic. La primera vez descarga lo que falte:
+      · Python portátil COMPLETO (~42 MB; ~26 MB en ARM64) con
+        interfaz gráfica, solo si tu PC no tiene Python 3.9+ con Tkinter
+      · yt-dlp + mutagen (~5 MB)
+      · FFmpeg (~90 MB) solo si tu PC no tiene FFmpeg
+   Necesita internet SOLO esa primera vez. Al terminar se abre la
+   ventana (la consola se cierra sola).
+3. En la ventana:
+      · Pega la URL del video (si trae lista de reproducción, la
+        lista se ignora: baja solo el video pegado).
+      · Elige Formato (AAC/MP3/FLAC/WAV/WMA/AVI) y Calidad.
+      · Carpeta: dónde guardar (se recuerda; botones "Cambiar..." y
+        "Abrir").
+      · Casilla "Embeber carátula, artista y álbum": metadatos.
+      · Navegador para cookies: solo si un video pide edad/sesión;
+        elige tu navegador y yt-dlp usará sus cookies.
+      · "Estimar tamano": calcula cuánto ocupará el archivo antes de
+        descargar (por duración del video).
+      · "Descargar y convertir": arranca todo; verás %, velocidad,
+        tiempo restante y el paso de conversión en la barra.
+      · "Comprobar calidad de la carpeta": analiza con ffprobe todos
+        los archivos guardados y marca los que tengan bitrate bajo.
+      · Atajos: Ctrl+U actualiza yt-dlp · Ctrl+L limpia el registro.
+      · Tema: Oscuro / Claro (arriba a la izquierda).
+4. Al terminar: el registro muestra nombre, tamaño y carpeta del
+   archivo; los errores aparecen en rojo con consejos.
+
+Si Windows SmartScreen avisa al ejecutarlo: clic en "Más info" →
+"Ejecutar de todas formas" (es normal para .bat caseros).
+
+
+DÓNDE QUEDA CADA COSA
+---------------------
+Junto al .bat se crean estas carpetas:
+   runtime\python\   Python portátil completo (solo si hubo que
+                     instalarlo; en v1 era runtime\ y se ignora)
+   ffmpeg\bin\       FFmpeg portable (solo si hubo que instalarlo)
+   _instalacion_tmp  temporal de la instalación (se borra sola)
+
+Y estos archivos de la aplicación:
+   descargador.py          la propia ventana (extraída del .bat)
+   ajustes.json            tus preferencias (tema, formato, carpeta...)
+   descargador_errores.log solo si hubo un fallo grave
+
+Las descargas se guardan en:   Música\YTDownloader\
+      \MP3   \AAC   \FLAC   \WAV   \WMA   \AVI
+(carpeta "Music" del usuario; puedes cambiarla en el campo Carpeta)
+
+
+FORMATOS Y PARÁMETROS TÉCNICOS
+------------------------------
+AAC   .m4a   AAC 128 kbps máx. Con título, artista y carátula.
+MP3   .mp3   128 / 192 / 256 / 320 kbps (desplegable Calidad).
+             Con título, artista y carátula incrustada.
+FLAC  .flac  sin pérdida. Con etiquetas y carátula.
+WAV   .wav   sin pérdida (archivos MUY grandes). Con etiquetas.
+WMA   .wma   WMA Standard v2 a 128 kbps, ideal para reproductores
+             viejos. Con etiquetas (el contenedor WMA no permite
+             incrustar carátula con FFmpeg).
+AVI   .avi   video para el reproductor "sheiju" MP3 de 1.8" con
+             pantalla 128x160. Usa los parámetros OFICIALES del
+             repositorio github.com/fdd4s/portable_mp3_player_
+             video_converter_tools (script video2shenju18.sh):
+
+   ffmpeg -i entrada -vf "scale=-2:128, crop=160:128, transpose=2, vflip"
+          -r 16 -acodec pcm_s16le -ac 2 -ar 22050 -pix_fmt yuvj420p
+          -c:v mjpeg -q:v 2 salida.avi
+
+   (MJPEG 16 fps + audio PCM 22050 Hz, rotado para la pantalla
+   vertical). Si el video es cuadrado o vertical (un Short, por
+   ejemplo), el recorte original sería imposible y el programa
+   reintenta solo, en "modo compatible" con bandas (letterbox).
+
+Notas honestas:
+· FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
+  fuente de YouTube ya viene comprimida (Opus ~130-160 kbps); solo
+  se conserva sin más generaciones de pérdida.
+· Para el AVI se baja el video en máx. 480p (sobra para 128x160 y
+  ahorra muchísima descarga).
+· Solo videos individuales: si pegas un enlace con lista de
+  reproducción, se ignora la lista y baja el video pegado.
+· La carátula incrustada necesita mutagen (lo instala el .bat).
+
+
+MANTENIMIENTO Y PROBLEMAS FRECUENTES
+------------------------------------
+· "Fallo la descarga / Sign in to confirm you're not a bot" o YouTube
+  cambió su web → pulsa Ctrl+U en la ventana (actualiza yt-dlp), o
+  vuelve a ejecutar el .bat, y reintenta. También puedes elegir tu
+  navegador en "Navegador para cookies".
+· La ventana no abre y no hay consola: mira descargador_errores.log
+  junto a descargador.py.
+· Quiero volver a instalar la aplicación desde cero:
+      DescargadorMusica.bat --reinstalar
+  (borra descargador.py y lo vuelve a extraer del propio .bat).
+· Quiero un "reset de fábrica": borra las carpetas "runtime" y
+  "ffmpeg" junto al .bat y vuelve a ejecutarlo.
+· Tenías la v1: no pasa nada; la carpeta runtime antigua queda
+  ignorada y tus ajustes (carpeta destino) se conservan. Para limpiar,
+  borra "runtime" tras actualizar una vez.
+· El antivirus grita con el FFmpeg descargado: es un falso positivo
+  común; usa versiones de gyan.dev/BtbN (proveedores conocidos) o
+  agrega una excepción para la carpeta del programa.
+· Requisito: Windows 10 versión 1803 (abril 2018) o superior
+  (32-bit, 64-bit y ARM64 soportados; el instalador usa el comando
+  tar integrado). En Windows 7 no funcionará.
+
+
+PARA TOCAR EL CÓDIGO (OPCIONAL)
+-------------------------------
+En la subcarpeta codigo_fuente\ están las piezas:
+   descargador.py      la ventana (aquí editas formatos, temas...)
+   plantilla_bat.txt   el instalador (lógica del .bat)
+   empaquetar.py       regenera el BAT único tras tus cambios:
+                          python empaquetar.py
+   probar_payload.py   verifica que el BAT quedó bien armado:
+                          python probar_payload.py DescargadorMusica.bat descargador.py
+Si solo quieres usar el programa, ignora esta carpeta.
+
+
+AVISO
+-----
+Descarga solo contenido cuyo uso te corresponda (tus propios
+videos, material con licencia libre, etc.). Respeta los términos de
+servicio y los derechos de autor de tu país.

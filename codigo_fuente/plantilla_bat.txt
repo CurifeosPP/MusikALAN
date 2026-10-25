@@ -1,0 +1,268 @@
+@echo off
+rem ================================================================
+rem  DESCARGADOR DE MUSICA - instalador y lanzador todo-en-uno
+rem  ----------------------------------------------------------------
+rem  Este unico archivo .bat:
+rem    [1] Restaura la aplicacion (script Python embebido en base64)
+rem    [2] Comprueba Python 3.9+ con Tkinter; si falta, descarga un
+rem        Python portatil COMPLETO en la carpeta "runtime"
+rem        (sin permisos de administrador; incluye la interfaz grafica)
+rem    [3] Instala yt-dlp y mutagen con pip si no estan
+rem    [4] Comprueba FFmpeg ; si falta, descarga una version portable
+rem        (gyan.dev o BtbN) en la carpeta "ffmpeg"
+rem    [5] Abre la ventana de descargas (YouTube Downloader)
+rem  Requisitos: Windows 10 1803 o superior. Internet solo la primera vez.
+rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
+rem ================================================================
+setlocal EnableExtensions
+title Descargador de Musica
+color 0B
+cls
+cd /d "%~dp0"
+
+set "APPDIR=%~dp0"
+set "RUNTIME=%APPDIR%runtime"
+set "FFDIR=%APPDIR%ffmpeg"
+set "SCRIPT=%APPDIR%descargador.py"
+set "TMPDIR=%APPDIR%_instalacion_tmp"
+set "PYEXE="
+set "PYARGS="
+
+rem --- arquitectura del equipo (para elegir la descarga correcta) ---
+set "ARCH=%PROCESSOR_ARCHITECTURE%"
+if defined PROCESSOR_ARCHITEW6432 set "ARCH=%PROCESSOR_ARCHITEW6432%"
+
+if not exist "%TMPDIR%" mkdir "%TMPDIR%"
+
+echo.
+echo  ==================================================================
+echo    DESCARGADOR DE MUSICA  -  preparando el entorno (un momento)
+echo  ==================================================================
+echo.
+
+echo  [1/5] Preparando la aplicacion (script Python embebido)...
+if "%~1"=="--reinstalar" if exist "%SCRIPT%" del /q "%SCRIPT%"
+if exist "%SCRIPT%" goto script_listo
+for /f "tokens=1 delims=:" %%a in ('findstr /b /c:":::" "%~f0"') do >>"%TMPDIR%\payload.b64" echo(%%a
+certutil -f -decode "%TMPDIR%\payload.b64" "%SCRIPT%" >nul 2>nul
+if errorlevel 1 goto err_payload
+del /q "%TMPDIR%\payload.b64" >nul 2>nul
+echo    OK: descargador.py listo.
+goto script_listo
+
+:err_payload
+echo    ERROR: no se pudo extraer el script embebido.
+echo    Vuelve a descargar el archivo DescargadorMusica.bat completo
+echo    (se pudo cortar al copiarlo o enviarlo).
+goto fin_error
+
+:script_listo
+echo  [2/5] Buscando Python con soporte de interfaz grafica...
+if exist "%RUNTIME%\python\python.exe" goto py_portatil
+py -3 -c "import sys,tkinter;sys.exit(not sys.version_info>=(3,9))" >nul 2>nul
+if not errorlevel 1 goto py_sys_py
+python -c "import sys,tkinter;sys.exit(not sys.version_info>=(3,9))" >nul 2>nul
+if not errorlevel 1 goto py_sys_plain
+call :instalar_python
+if errorlevel 1 goto fin_error
+goto py_listo
+
+:py_portatil
+set "PYEXE=%RUNTIME%\python\python.exe"
+set "PYARGS="
+echo    OK: Python portatil propio encontrado.
+goto py_listo
+
+:py_sys_py
+set "PYEXE=py"
+set "PYARGS=-3"
+echo    OK: Python del sistema encontrado (py launcher).
+goto py_listo
+
+:py_sys_plain
+set "PYEXE=python"
+set "PYARGS="
+echo    OK: Python del sistema encontrado.
+goto py_listo
+
+:py_listo
+echo  [3/5] Verificando yt-dlp y mutagen...
+"%PYEXE%" %PYARGS% -c "import pip" >nul 2>nul
+if errorlevel 1 "%PYEXE%" %PYARGS% -m ensurepip --upgrade >nul 2>nul
+"%PYEXE%" %PYARGS% -c "import yt_dlp, mutagen" >nul 2>nul
+if not errorlevel 1 goto ytdlp_ok
+echo    Instalando yt-dlp y mutagen (solo la primera vez, un momento)...
+"%PYEXE%" %PYARGS% -m pip install --upgrade --no-warn-script-location yt-dlp mutagen
+if not errorlevel 1 goto ytdlp_ok
+echo    Reintentando con instalacion por usuario...
+"%PYEXE%" %PYARGS% -m pip install --upgrade --user --no-warn-script-location yt-dlp mutagen
+if not errorlevel 1 goto ytdlp_ok
+echo    ERROR: no se pudo instalar yt-dlp. Revisa tu conexion a internet.
+goto fin_error
+
+:ytdlp_ok
+echo    OK: yt-dlp y mutagen estan listos.
+
+echo  [4/5] Buscando FFmpeg...
+if exist "%FFDIR%\bin\ffmpeg.exe" goto ff_local
+ffmpeg -version >nul 2>nul
+if not errorlevel 1 goto ff_sistema
+call :instalar_ffmpeg
+if errorlevel 1 goto fin_error
+
+:ff_local
+set "PATH=%FFDIR%\bin;%PATH%"
+echo    OK: FFmpeg listo (carpeta ffmpeg\bin).
+goto ff_listo
+
+:ff_sistema
+echo    OK: FFmpeg del sistema encontrado.
+:ff_listo
+
+echo  [5/5] Todo listo. Abriendo la aplicacion...
+rmdir /s /q "%TMPDIR%" >nul 2>nul
+title Descargador de Musica - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+if exist "%RUNTIME%\python\pythonw.exe" goto lanzar_gui
+echo    La ventana de descargas se abre a continuacion.
+echo    Puedes dejar esta consola abierta o cerrarla.
+"%PYEXE%" %PYARGS% "%SCRIPT%"
+if errorlevel 1 goto fin_error_run
+endlocal
+exit /b 0
+
+:lanzar_gui
+start "" "%RUNTIME%\python\pythonw.exe" "%SCRIPT%"
+endlocal
+exit /b 0
+
+:fin_error_run
+echo.
+echo  El programa se cerro con un error. Sugerencias:
+echo    - Ejecuta este archivo de nuevo.
+echo    - Revisa el archivo descargador_errores.log si existe.
+echo    - Borra las carpetas "runtime" y "ffmpeg" y ejecuta de nuevo.
+goto fin_pausa
+
+:fin_error
+echo.
+echo  La instalacion no se completo. Ejecuta este archivo de nuevo
+echo  y revisa tu conexion a internet.
+:fin_pausa
+echo.
+pause
+exit /b 1
+
+rem ==================== SUBRUTINAS ====================
+
+:instalar_python
+echo    Python 3.9+ con Tkinter no encontrado en este PC.
+set "PBSARCH=x86_64"
+if /i "%ARCH%"=="X86" set "PBSARCH=i686"
+if /i "%ARCH%"=="ARM64" goto ip_arm
+echo    Descargando Python portatil completo, unos 42 MB, solo la primera vez...
+call :Descargar "https://github.com/astral-sh/python-build-standalone/releases/download/20250517/cpython-3.12.10+20250517-%PBSARCH%-pc-windows-msvc-install_only.tar.gz" "%TMPDIR%\python.tar.gz"
+if errorlevel 1 goto ip_err_desc
+if not exist "%RUNTIME%" mkdir "%RUNTIME%"
+echo    Descomprimiendo Python...
+tar -xzf "%TMPDIR%\python.tar.gz" -C "%RUNTIME%"
+if errorlevel 1 goto ip_err_tar
+del /q "%TMPDIR%\python.tar.gz" >nul 2>nul
+if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
+set "PYEXE=%RUNTIME%\python\python.exe"
+set "PYARGS="
+echo    OK: Python portatil instalado en la carpeta "runtime".
+exit /b 0
+
+:ip_arm
+echo    Descargando Python ARM64 para Windows, unos 26 MB...
+call :Descargar "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.exe" "%TMPDIR%\python-arm64.exe"
+if errorlevel 1 goto ip_err_desc
+echo    Instalando Python en silencio, un momento...
+"%TMPDIR%\python-arm64.exe" /quiet InstallAllUsers=0 TargetDir="%RUNTIME%\python" Include_launcher=0 AssociateFiles=0 Shortcuts=0 PrependPath=0 Include_test=0 Include_doc=0
+set "IPEC=%errorlevel%"
+if "%IPEC%"=="3010" set "IPEC=0"
+del /q "%TMPDIR%\python-arm64.exe" >nul 2>nul
+if not "%IPEC%"=="0" goto ip_err_zip
+if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
+set "PYEXE=%RUNTIME%\python\python.exe"
+set "PYARGS="
+echo    OK: Python ARM64 instalado en la carpeta "runtime".
+exit /b 0
+
+:ip_err_desc
+echo    ERROR: fallo la descarga. Revisa tu conexion e intentalo de nuevo.
+exit /b 1
+
+:ip_err_tar
+echo    ERROR: no se pudo descomprimir Python con tar.
+echo    Se necesita Windows 10 version 1803 o mas nueva.
+exit /b 1
+
+:ip_err_zip
+echo    ERROR: la instalacion de Python no termino bien.
+echo    Borra la carpeta "runtime" y ejecuta este archivo de nuevo.
+exit /b 1
+
+:instalar_ffmpeg
+echo    FFmpeg no encontrado en este PC.
+if /i "%ARCH%"=="ARM64" goto ff_url_arm
+if /i "%ARCH%"=="X86" goto ff_url_x86
+echo    Descargando FFmpeg para Windows 64-bit, unos 90 MB, puede tardar...
+call :Descargar "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" "%TMPDIR%\ffmpeg.zip"
+if not errorlevel 1 goto ff_extraer
+echo    Servidor principal sin respuesta, probando el alternativo (BtbN)...
+call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip" "%TMPDIR%\ffmpeg.zip"
+if errorlevel 1 goto ff_err_desc
+goto ff_extraer
+
+:ff_url_arm
+echo    Descargando FFmpeg para Windows ARM64...
+call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-winarm64-gpl.zip" "%TMPDIR%\ffmpeg.zip"
+if errorlevel 1 goto ff_err_desc
+goto ff_extraer
+
+:ff_url_x86
+echo    Descargando FFmpeg para Windows 32-bit...
+call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win32-gpl.zip" "%TMPDIR%\ffmpeg.zip"
+if errorlevel 1 goto ff_err_desc
+
+:ff_extraer
+echo    Descomprimiendo FFmpeg...
+if exist "%TMPDIR%\ffx" rmdir /s /q "%TMPDIR%\ffx"
+mkdir "%TMPDIR%\ffx"
+call :Extraer "%TMPDIR%\ffmpeg.zip" "%TMPDIR%\ffx"
+if errorlevel 1 goto ff_err_zip
+if not exist "%FFDIR%" mkdir "%FFDIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=(Get-ChildItem -LiteralPath '%TMPDIR%\ffx' -Directory | Select-Object -First 1).FullName; Move-Item -LiteralPath (Join-Path $d 'bin') -Destination '%FFDIR%\bin' -Force"
+if errorlevel 1 goto ff_err_zip
+if not exist "%FFDIR%\bin\ffmpeg.exe" goto ff_err_zip
+echo    OK: FFmpeg instalado en la carpeta "ffmpeg".
+exit /b 0
+
+:ff_err_desc
+echo    ERROR: fallo la descarga de FFmpeg. Revisa tu conexion.
+exit /b 1
+
+:ff_err_zip
+echo    ERROR: no se pudo descomprimir FFmpeg.
+exit /b 1
+
+:Descargar
+rem  Uso: call :Descargar "URL" "archivo destino"
+rem  Usa curl (incluido en Windows 10+) y cae a PowerShell si falta.
+where curl >nul 2>nul
+if errorlevel 1 goto Descargar_ps
+curl -L -f --retry 3 --retry-delay 2 --connect-timeout 20 -o "%~2" "%~1"
+if not errorlevel 1 exit /b 0
+echo    curl fallo, probando con PowerShell...
+:Descargar_ps
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; (New-Object Net.WebClient).DownloadFile('%~1','%~2')"
+exit /b %errorlevel%
+
+:Extraer
+rem  Uso: call :Extraer "archivo.zip" "carpeta destino"
+rem  Usa tar (incluido en Windows 10+) y cae a PowerShell si falta.
+tar -xf "%~1" -C "%~2" >nul 2>nul
+if not errorlevel 1 exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%~1' -DestinationPath '%~2' -Force"
+exit /b %errorlevel%

@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Estado en tiempo de ejecución de la app (no versionar)
+ajustes.json
+descargador_errores.log
+descargador.py
+runtime/
+ffmpeg/
+_instalacion_tmp/
+
+# Sistema
+Thumbs.db
+Desktop.ini
