@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Descargador de Musica — interfaz grafica (Tkinter) para yt-dlp + FFmpeg
+MusikALAN — interfaz grafica (Tkinter) para yt-dlp + FFmpeg
 =======================================================================
 App de escritorio para descargar musica y videos de YouTube en formatos
 aptos para reproductores portatiles antiguos (tipo "sheiju" MP3 de 1.8"
@@ -41,7 +41,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.1'
+APP_V = '2.2'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -83,7 +83,8 @@ except Exception:
 
 # ---------------------------------------------------------------- ajustes
 def _destino_por_defecto():
-    return str(Path.home() / 'Music' / 'YTDownloader')
+    base = os.environ.get('APPDATA') or str(Path.home() / 'AppData' / 'Roaming')
+    return str(Path(base) / 'MusikALAN')
 
 
 AJUSTES_DEFECTO = {
@@ -102,6 +103,11 @@ def cargar_ajustes():
         a.update(json.loads(RUTA_AJUSTES.read_text(encoding='utf-8')))
     except Exception:
         pass
+    # migracion: la v2.0/2.1 guardaba por defecto Music/YTDownloader;
+    # si el destino guardado apunta ahi, se pasa a AppData\Roaming\MusikALAN
+    destino_viejo = str(a.get('destino') or '').replace('\\', '/').lower()
+    if 'ytdownloader' in destino_viejo:
+        a['destino'] = AJUSTES_DEFECTO['destino']
     return a
 
 
@@ -590,7 +596,7 @@ if TK_OK:
             if getattr(sys, 'frozen', False):
                 pass
             super().__init__()
-            self.title('YouTube Downloader')
+            self.title('MusikALAN')
             self.geometry('860x840')
             self.minsize(700, 660)
             self.cola = queue.Queue()
@@ -1302,7 +1308,7 @@ if TK_OK:
 
         # ------------------------------------------------ arranque
         def _arranque(self):
-            self._log(f'Descargador de Musica v{APP_V} — '
+            self._log(f'MusikALAN v{APP_V} — '
                       'YouTube Downloader', 'titulo')
             self._log('Ctrl+U: actualizar yt-dlp · Ctrl+L: limpiar registro',
                       'gris')

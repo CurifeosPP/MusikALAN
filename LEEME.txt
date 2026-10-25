@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  DESCARGADOR DE MÚSICA v2.1  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.2  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -8,10 +8,15 @@ QUÉ ES
 ------
 Un solo archivo (DescargadorMusica.bat) que lo hace todo: instala lo
 que falte (Python, yt-dlp, mutagen y FFmpeg, en modo portable y SIN
-permisos de administrador) y luego abre la ventana "YouTube
-Downloader": una interfaz gráfica con tema oscuro, desplegables de
+permisos de administrador) y luego abre la ventana "MusikALAN": una
+interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, cookies de navegador, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.2: el programa se llama MusikALAN (como el repositorio),
+las descargas van por defecto a AppData\Roaming\MusikALAN (migra sola
+tu carpeta antigua) y la consola del .bat se cierra sola al abrir la
+ventana, sin cortar el programa.
 
 Novedades v2.1: instalador de consola rediseñado (banner, colores y
 resumen con tiempo total) y FFmpeg se descarga ahora de los espejos
@@ -71,9 +76,11 @@ Y estos archivos de la aplicación:
    ajustes.json            tus preferencias (tema, formato, carpeta...)
    descargador_errores.log solo si hubo un fallo grave
 
-Las descargas se guardan en:   Música\YTDownloader\
+Las descargas se guardan en:
+      C:\Users\TU_USUARIO\AppData\Roaming\MusikALAN\
       \MP3   \AAC   \FLAC   \WAV   \WMA   \AVI
-(carpeta "Music" del usuario; puedes cambiarla en el campo Carpeta)
+(si actualizas desde una versión antigua, tu carpeta de destino se
+migra sola; puedes cambiarla igualmente en el campo Carpeta)
 
 
 FORMATOS Y PARÁMETROS TÉCNICOS

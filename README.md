@@ -1,4 +1,4 @@
-# YouTube Downloader (Descargador de Música)
+# MusikALAN — Descargador de Música para YouTube
 
 Aplicación de escritorio para Windows que descarga música y videos de YouTube
 en formatos aptos para reproductores portátiles antiguos (tipo *sheiju* MP3 de
@@ -37,7 +37,8 @@ descargas.
    FFmpeg (~90 MB) si no los tienes. Solo necesita internet esa primera vez.
 3. Pega la URL, elige formato/calidad y pulsa **Descargar y convertir**.
 
-Las descargas quedan en `Música\YTDownloader\<FORMATO>\` (carpeta cambiable).
+Las descargas quedan en `%APPDATA%\MusikALAN\<FORMATO>\` (es decir,
+`C:\Users\TU_USUARIO\AppData\Roaming\MusikALAN`; carpeta cambiable).
 
 ## Formato AVI para reproductor sheiju 1.8"
 

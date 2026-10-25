@@ -1,6 +1,6 @@
 @echo off
 rem ================================================================
-rem  DESCARGADOR DE MUSICA - instalador y lanzador todo-en-uno
+rem  MUSIKALAN - instalador y lanzador todo-en-uno (antes Descargador de Musica)
 rem  ----------------------------------------------------------------
 rem  Este unico archivo .bat:
 rem    [1] Restaura la aplicacion (script Python embebido en base64)
@@ -16,7 +16,7 @@ rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title Descargador de Musica v2.1
+title MusikALAN v2.2
 cd /d "%~dp0"
 
 set "APPDIR=%~dp0"
@@ -26,6 +26,8 @@ set "SCRIPT=%APPDIR%descargador.py"
 set "TMPDIR=%APPDIR%_instalacion_tmp"
 set "PYEXE="
 set "PYARGS="
+set "GUIEXE="
+set "GUIARGS="
 
 rem --- arquitectura del equipo (para elegir la descarga correcta) ---
 set "ARCH=%PROCESSOR_ARCHITECTURE%"
@@ -61,18 +63,19 @@ set "TINI=%time: =0%"
 
 cls
 echo.
-echo  %C_TIT% ___  ___ ___  ___   _   ___  ___   _   ___   ___  ___%C_FIN%
-echo  %C_TIT%^|   \^| __/ __^|/ __^| /_\ ^| _ \/ __^| /_\ ^|   \ / _ \^| _ \%C_FIN%
-echo  %C_TIT%^| ^|) ^| _^|\__ \ (__ / _ \^|   / (_ ^|/ _ \^| ^|) ^| (_) ^|   /%C_FIN%
-echo  %C_TIT%^|___/^|___^|___/\___/_/ \_\_^|_\\___/_/ \_\___/ \___/^|_^|_\%C_FIN%
+echo  %C_TIT% __  __ _   _ ___ ___ _  __   _   _      _   _  _%C_FIN%
+echo  %C_TIT%^|  \/  ^| ^| ^| / __^|_ _^| ^|/ /  /_\ ^| ^|    /_\ ^| \^| ^|%C_FIN%
+echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_FIN%
+echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%Descargador de Musica v2.1%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.2%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo    Sistema : Windows 10 o superior, %ARCH%
 echo    Carpeta : %APPDIR%
+echo    Destino : %APPDATA%\MusikALAN
 echo.
 
 echo  %C_INFO%[1/5]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
@@ -105,18 +108,38 @@ goto py_listo
 :py_portatil
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
+set "GUIEXE=%RUNTIME%\python\pythonw.exe"
+set "GUIARGS="
 echo    %C_OK%OK%C_FIN% Python portatil propio (carpeta runtime).
 goto py_listo
 
 :py_sys_py
 set "PYEXE=py"
 set "PYARGS=-3"
+set "GUIEXE="
+set "GUIARGS="
+pyw -3 -c "import tkinter" >nul 2>nul
+if errorlevel 1 goto py_sys_py_fin
+set "GUIEXE=pyw"
+set "GUIARGS=-3"
+:py_sys_py_fin
 echo    %C_OK%OK%C_FIN% Python del sistema encontrado (py launcher).
 goto py_listo
 
 :py_sys_plain
 set "PYEXE=python"
 set "PYARGS="
+set "GUIEXE="
+set "GUIARGS="
+pythonw -c "import tkinter" >nul 2>nul
+if errorlevel 1 goto py_plain_busca
+set "GUIEXE=pythonw"
+goto py_plain_fin
+:py_plain_busca
+set "PYSYS="
+for /f "delims=" %%P in ('python -c "import sys, os; print(os.path.dirname(sys.executable))" 2^>nul') do set "PYSYS=%%P"
+if defined PYSYS if exist "%PYSYS%\pythonw.exe" set "GUIEXE=%PYSYS%\pythonw.exe"
+:py_plain_fin
 echo    %C_OK%OK%C_FIN% Python del sistema encontrado.
 goto py_listo
 
@@ -165,21 +188,21 @@ if defined SEG if %SEG% GTR 0 set "SEG_TXT=   (tardo %SEG% segundos)"
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo   %C_OK%Instalacion completada%C_FIN%%SEG_TXT%
-echo   Las descargas quedan en tu carpeta Musica\YTDownloader (cambiable).
-echo   Puedes cerrar esta consola cuando quieras; la ventana es independiente.
+echo   Descargas en: %APPDATA%\MusikALAN (cambiable en la ventana)
+echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title Descargador de Musica v2.1 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
-if exist "%RUNTIME%\python\pythonw.exe" goto lanzar_gui
-echo    La ventana de descargas se abre a continuacion.
-echo    Puedes dejar esta consola abierta o cerrarla.
+title MusikALAN v2.2 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+if defined GUIEXE goto lanzar_gui
+echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
+echo    deja esta consola abierta mientras uses el programa.
 "%PYEXE%" %PYARGS% "%SCRIPT%"
 if errorlevel 1 goto fin_error_run
 endlocal
 exit /b 0
 
 :lanzar_gui
-start "" "%RUNTIME%\python\pythonw.exe" "%SCRIPT%"
+start "" "%GUIEXE%" %GUIARGS% "%SCRIPT%"
 endlocal
 exit /b 0
 
@@ -218,6 +241,8 @@ del /q "%TMPDIR%\python.tar.gz" >nul 2>nul
 if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
+set "GUIEXE=%RUNTIME%\python\pythonw.exe"
+set "GUIARGS="
 echo    %C_OK%OK%C_FIN% Python portatil instalado en la carpeta "runtime".
 exit /b 0
 
@@ -234,6 +259,8 @@ if not "%IPEC%"=="0" goto ip_err_zip
 if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
+set "GUIEXE=%RUNTIME%\python\pythonw.exe"
+set "GUIARGS="
 echo    %C_OK%OK%C_FIN% Python ARM64 instalado en la carpeta "runtime".
 exit /b 0
 
