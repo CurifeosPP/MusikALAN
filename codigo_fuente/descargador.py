@@ -24,10 +24,12 @@ diario (tema oscuro/claro, estimacion de tamano y comprobador de
 calidad de la carpeta). La carpeta de guardado por defecto es la
 carpeta Musica de Windows, y los archivos van directos a ella, sin
 subcarpetas por formato. Tras cada descarga se escriben las etiquetas
-del archivo (artista sin el sufijo " - Topic", album, titulo, ano y URL)
-para que todos los reproductores las muestren, y la caratula SIEMPRE
-se incrusta en JPEG: la miniatura de YouTube viene en WebP y muchos
-reproductores baratos solo leen JPEG (igual que --convert-thumbnails
+del archivo (artista sin el sufijo " - Topic", album, titulo, ano, URL)
+en el MISMO formato binario que usa FFmpeg en los MP3 que los
+reproductores baratos SI leen (ID3v2.4 + textos UTF-16 con BOM,
+verificado contra un MP3 real descargado con Snaptube), y la caratula
+SIEMPRE se incrusta en JPEG: la miniatura de YouTube viene en WebP y
+muchos reproductores solo leen JPEG (igual que --convert-thumbnails
 jpg del comando antiguo, que es lo que si funcionaba).
 
 Uso:  python descargador.py   (o doble clic en DescargadorMusica.bat)
@@ -51,7 +53,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.5'
+APP_V = '2.6'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -552,6 +554,13 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
 
     Garantiza que TODOS los reproductores muestren artista y album,
     aunque FFmpegMetadata de yt-dlp no los haya escrito. Ademas:
+      · MP3: ID3v2.4 con textos UTF-16 (encoding=1) y APIC(mime
+        'image/jpg', tipo 3, desc 'attached picture'), calcado del
+        MP3 de referencia que el reproductor del usuario muestra
+        bien. El pase antiguo usaba encoding=3 (UTF-8) dentro de un
+        tag v2.3: fuera de especificacion, y los reproductores
+        baratos descartaban la etiqueta ENTERA (ni artista, ni
+        album, ni portada).
       · la caratula siempre acaba en JPEG (yt-dlp incrusta las
         miniaturas de YouTube como PNG/WebP y muchos reproductores
         baratos solo leen JPEG; cuando el parser de la caratula falla,
@@ -610,55 +619,83 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
                 m.pop('\xa9covr', None)
             m.save()
         elif ext == '.mp3':
+            # Formato EXACTO del MP3 de referencia (Snaptube, escrito por
+            # FFmpeg/Lavf) que el reproductor del usuario SI muestra:
+            #   ID3v2.4.0 + TIT2/TPE1/TALB/APIC en encoding=1 (UTF-16 con
+            #   BOM) + APIC(mime 'image/jpg', tipo 3 = COVER_FRONT, desc
+            #   'attached picture', JPEG real). El pase anterior escribia
+            #   encoding=3 (UTF-8) dentro de un tag v2.3: fuera de
+            #   especificacion, y los reproductores baratos descartaban
+            #   la etiqueta entera (ni artista, ni album, ni portada).
             from mutagen.id3 import (APIC, COMM, ID3, TALB, TDRC, TIT2,
-                                     TPE1, TPE2)
+                                     TLEN, TPE1, TPE2)
             try:
                 tags = ID3(str(p))
             except Exception:
                 tags = ID3()
             if titulo:
-                tags.setall('TIT2', [TIT2(encoding=3, text=[titulo])])
+                tags.setall('TIT2', [TIT2(encoding=1, text=[titulo])])
             if artista:
-                tags.setall('TPE1', [TPE1(encoding=3, text=[artista])])
-                tags.setall('TPE2', [TPE2(encoding=3, text=[artista])])
+                tags.setall('TPE1', [TPE1(encoding=1, text=[artista])])
+                tags.setall('TPE2', [TPE2(encoding=1, text=[artista])])
             if album:
-                tags.setall('TALB', [TALB(encoding=3, text=[album])])
+                tags.setall('TALB', [TALB(encoding=1, text=[album])])
             if fecha:
-                tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+                tags.setall('TDRC', [TDRC(encoding=1, text=[fecha])])
+            dur = info.get('duration')
+            if dur:
+                try:
+                    tags.setall('TLEN', [TLEN(encoding=0, text=[
+                        str(int(float(dur) * 1000))])])
+                except (TypeError, ValueError):
+                    pass
             if url:
-                tags.setall('COMM', [COMM(encoding=3, lang='eng',
+                tags.setall('COMM', [COMM(encoding=1, lang='eng',
                                           desc='', text=[url])])
-            apics = tags.getall('APIC')
-            if not apics:
-                if caratula:
-                    tags.setall('APIC', [APIC(encoding=3, mime='image/jpeg',
-                                              type=3, desc='Cover',
-                                              data=caratula)])
-            elif all(a.mime != 'image/jpeg' for a in apics):
-                nueva = _a_jpg(apics[0].data) or caratula
-                if nueva:
-                    tags.setall('APIC', [APIC(encoding=3, mime='image/jpeg',
-                                              type=apics[0].type or 3,
-                                              desc=apics[0].desc or 'Cover',
-                                              data=nueva)])
-            tags.save(str(p), v2_version=3)
+            # Portada: mismas constantes del archivo de referencia.
+            # Bytes: `caratula` o, si EmbedThumbnail ya incrusto algo,
+            # los datos del APIC existente; siempre acabamos en JPEG.
+            datos = caratula
+            if not datos:
+                apics = tags.getall('APIC')
+                if apics:
+                    datos = apics[0].data
+            if datos and not _es_jpg(datos):
+                datos = _a_jpg(datos)
+            if datos:
+                tags.setall('APIC', [APIC(encoding=1, mime='image/jpg',
+                                          type=3, desc='attached picture',
+                                          data=datos)])
+            # v2.4 + UTF-16: la misma combinacion del archivo de
+            # referencia (ID3v2.4.0 escrito por Lavf60.3.100).
+            tags.save(str(p), v2_version=4)
         elif ext == '.wav':
-            from mutagen.id3 import COMM, TDRC, TIT2, TPE1, TPE2, TALB
+            from mutagen.id3 import (COMM, TDRC, TIT2, TLEN, TPE1, TPE2,
+                                     TALB)
             from mutagen.wave import WAVE
             w = WAVE(str(p))
             if w.tags is None:
                 w.add_tags()
+            # encoding=1 (UTF-16), misma regla que en MP3: los
+            # reproductores baratos no parsean frames UTF-8.
             if titulo:
-                w.tags.setall('TIT2', [TIT2(encoding=3, text=[titulo])])
+                w.tags.setall('TIT2', [TIT2(encoding=1, text=[titulo])])
             if artista:
-                w.tags.setall('TPE1', [TPE1(encoding=3, text=[artista])])
-                w.tags.setall('TPE2', [TPE2(encoding=3, text=[artista])])
+                w.tags.setall('TPE1', [TPE1(encoding=1, text=[artista])])
+                w.tags.setall('TPE2', [TPE2(encoding=1, text=[artista])])
             if album:
-                w.tags.setall('TALB', [TALB(encoding=3, text=[album])])
+                w.tags.setall('TALB', [TALB(encoding=1, text=[album])])
             if fecha:
-                w.tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+                w.tags.setall('TDRC', [TDRC(encoding=1, text=[fecha])])
+            dur = info.get('duration')
+            if dur:
+                try:
+                    w.tags.setall('TLEN', [TLEN(encoding=0, text=[
+                        str(int(float(dur) * 1000))])])
+                except (TypeError, ValueError):
+                    pass
             if url:
-                w.tags.setall('COMM', [COMM(encoding=3, lang='eng',
+                w.tags.setall('COMM', [COMM(encoding=1, lang='eng',
                                             desc='', text=[url])])
             w.save()
         elif ext == '.flac':

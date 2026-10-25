@@ -21,13 +21,16 @@ descargas.
   sin subcarpetas por formato (carpeta cambiable, se recuerda en
   `ajustes.json`)
 - Casilla para embeber **carátula** (vía yt-dlp + mutagen)
-- **Etiquetas completas desde la v2.4/v2.5**: título, artista (limpio, sin el
-  sufijo " - Topic" de los canales de música de YouTube), álbum (el de la
-  playlist si descargas una lista), año y URL escritos con mutagen en AAC/MP3/
-  FLAC/WAV/WMA; la **carátula va siempre en JPEG** (las miniaturas de YouTube
-  son WebP y muchos reproductores baratos solo leen JPEG — el mismo truco que
-  `--convert-thumbnails jpg` del comando antiguo) y el **WMA también lleva
-  carátula** (WM/Picture) y URL (WM/AuthorURL)
+- **Etiquetas completas desde la v2.4, y desde la v2.6 en formato ID3v2.4 +
+  UTF-16 (el mismo binario que los MP3 comerciales que los reproductores
+  antiguos sí leen)**: título, artista (limpio, sin el sufijo " - Topic" de los
+  canales de música de YouTube), álbum (el de la playlist si descargas una
+  lista), año, duración y URL escritos con mutagen en AAC/MP3/FLAC/WAV/WMA;
+  la **carátula va siempre en JPEG** con el mime exacto `image/jpg` y tipo
+  *attached picture* (las miniaturas de YouTube son WebP y muchos reproductores
+  baratos solo leen JPEG — el mismo truco que `--convert-thumbnails jpg` del
+  comando antiguo) y el **WMA también lleva carátula** (WM/Picture) y URL
+  (WM/AuthorURL)
 - **Estimación de tamaño** antes de descargar (por duración del video)
 - **Comprobador de calidad de carpeta** con ffprobe: lista bitrate, duración y
   tamaño de cada archivo y marca los de bitrate bajo

@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.5  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.6  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,16 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.6: las etiquetas del MP3 ahora se escriben en el MISMO
+formato binario que usan los MP3 que sí se ven bien en el reproductor
+(comprobado contra una canción real descargada con Snaptube):
+ID3v2.4 con los textos en UTF-16 (antes iban en UTF-8 dentro de un
+tag ID3v2.3, una combinación no estándar que los reproductores
+baratos descartaban entera: por eso no salían ni el artista ni el
+álbum ni la carátula), portada con el mime exacto "image/jpg" y tipo
+"attached picture", y longitud de la canción (TLEN). El WAV usa la
+misma regla UTF-16. Se añade además la duración en milisegundos.
 
 Novedades v2.5: la carátula SIEMPRE se incrusta en JPEG (la miniatura
 que da YouTube es WebP y muchos reproductores baratos —tipo sheiju—
@@ -150,9 +160,11 @@ llevan escritas en el propio archivo el título, el artista (sin el
 sufijo " - Topic" de los canales de YouTube), el álbum (el de la
 playlist si descargas una lista; si es una canción suelta, el propio
 artista) y el año. Así los reproductores de música siempre muestran
-artista y álbum. Desde la v2.5, además, la carátula va garantizada
-en JPEG en AAC/MP3/FLAC (y en WMA con WM/Picture), con la URL de la
-canción en el comentario.
+artista y álbum. Desde la v2.6, además, el MP3 usa el mismo formato
+de etiqueta binaria (ID3v2.4 + UTF-16) que los MP3 comerciales que el
+reproductor sí muestra, la carátula va garantizada en JPEG en
+AAC/MP3/FLAC (y en WMA con WM/Picture), y la URL de la canción queda
+en el comentario.
 
 Notas honestas:
 · FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
