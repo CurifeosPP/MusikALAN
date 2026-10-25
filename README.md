@@ -20,7 +20,11 @@ descargas.
 - Guarda por defecto en tu carpeta **Música** de Windows, directamente y
   sin subcarpetas por formato (carpeta cambiable, se recuerda en
   `ajustes.json`)
-- Casilla para embeber **carátula, artista y álbum** (vía yt-dlp + mutagen)
+- Casilla para embeber **carátula** (vía yt-dlp + mutagen)
+- **Etiquetas completas desde la v2.4**: título, artista (limpio, sin el
+  sufijo " - Topic" de los canales de música de YouTube), álbum (el de la
+  playlist si descargas una lista) y año escritos con mutagen en AAC/MP3/
+  FLAC/WAV/WMA, para que todos los reproductores muestren artista y álbum
 - **Estimación de tamaño** antes de descargar (por duración del video)
 - **Comprobador de calidad de carpeta** con ffprobe: lista bitrate, duración y
   tamaño de cada archivo y marca los de bitrate bajo
@@ -29,7 +33,9 @@ descargas.
   para reintentar
 - Instalación 100% portable y sin admin: Python build standalone + yt-dlp +
   mutagen + FFmpeg (espejos rápidos de GitHub: GyanD y BtbN, con gyan.dev de
-  reserva) en carpetas locales
+  reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
+  .bat esté en Descargas, y con **migración automática** de una instalación
+  anterior situada junto al .bat)
 - Comprobación de versión de yt-dlp contra PyPI al arrancar y actualización
   integrada (Ctrl+U)
 
@@ -45,7 +51,9 @@ descargas.
 
 Las descargas quedan en tu carpeta **Música** (`C:\Users\TU_USUARIO\Music`),
 directamente y sin subcarpetas por formato (carpeta cambiable en la ventana).
-Si venías de la v2.2, el destino antiguo (`%APPDATA%\MusikALAN`) se migra solo.
+El programa y sus componentes viven en `%APPDATA%\Roaming\MusikALAN`; si
+venías de una versión anterior, el propio .bat mueve solo esa instalación
+antigua a la nueva carpeta (sin volver a descargar nada).
 
 ## Formato AVI para reproductor sheiju 1.8"
 

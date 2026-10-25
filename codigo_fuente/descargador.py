@@ -23,7 +23,9 @@ archivo DescargadorMusica.bat; este script es la ventana que se usa a
 diario (tema oscuro/claro, estimacion de tamano y comprobador de
 calidad de la carpeta). La carpeta de guardado por defecto es la
 carpeta Musica de Windows, y los archivos van directos a ella, sin
-subcarpetas por formato.
+subcarpetas por formato. Tras cada descarga se escriben las etiquetas
+del archivo (artista sin el sufijo " - Topic", album, titulo y ano)
+para que todos los reproductores las muestren.
 
 Uso:  python descargador.py   (o doble clic en DescargadorMusica.bat)
 Si la URL pertenece a una lista de reproduccion, el programa pregunta
@@ -45,7 +47,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.3'
+APP_V = '2.4'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -452,6 +454,135 @@ def limpiar_miniaturas(carpeta, archivo):
                 pass
 
 
+# ---------------------------------------------------------------- etiquetas
+def _artista_limpio(info):
+    """Nombre del artista legible para reproductores.
+
+    Los canales automaticos de musica de YouTube se llaman 'X - Topic';
+    ese sufijo sobra cuando se ve en la pantalla de un reproductor."""
+    a = (info.get('artist') or info.get('creator')
+         or info.get('uploader') or info.get('channel') or '')
+    a = str(a).strip()
+    a = re.sub(r'\s*-\s*Topic\s*$', '', a, flags=re.I).strip()
+    return a
+
+
+def _album_de(info):
+    """Album para el archivo final.
+
+    yt-dlp solo escribe album si el propio video lo trae (casi nunca):
+    por eso los reproductores mostraban 'album desconocido'. Orden de
+    preferencia: album real -> nombre de la playlist -> artista."""
+    for clave in ('album', 'playlist_title'):
+        v = str(info.get(clave) or '').strip()
+        if v:
+            return v
+    return _artista_limpio(info) or 'YouTube'
+
+
+def aplicar_tags(info, archivo, log=None):
+    """Escribe con mutagen las etiquetas del archivo final.
+
+    Garantiza que TODOS los reproductores muestren artista y album,
+    aunque FFmpegMetadata de yt-dlp no los haya escrito. La caratula
+    que EmbedThumbnail ya incrusto se conserva (solo se tocan las
+    claves de texto). Formatos: m4a, mp3, wav, flac y wma."""
+    try:
+        p = Path(archivo)
+        if not p.exists():
+            return
+        artista = _artista_limpio(info)
+        album = _album_de(info)
+        titulo = str(info.get('track') or info.get('title') or '').strip()
+        fecha = str(info.get('release_year') or '')
+        if not fecha:
+            fecha = str(info.get('upload_date') or '')
+            if len(fecha) == 8 and fecha.isdigit():
+                fecha = fecha[:4]
+        ext = p.suffix.lower()
+        if ext == '.m4a':
+            from mutagen.mp4 import MP4
+            m = MP4(str(p))
+            if titulo:
+                m['\xa9nam'] = [titulo]
+            if artista:
+                m['\xa9ART'] = [artista]
+                m['aART'] = [artista]
+            if album:
+                m['\xa9alb'] = [album]
+            if fecha:
+                m['\xa9day'] = [fecha]
+            m.save()
+        elif ext == '.mp3':
+            from mutagen.id3 import ID3, TALB, TDRC, TIT2, TPE1, TPE2
+            try:
+                tags = ID3(str(p))
+            except Exception:
+                tags = ID3()
+            if titulo:
+                tags.setall('TIT2', [TIT2(encoding=3, text=[titulo])])
+            if artista:
+                tags.setall('TPE1', [TPE1(encoding=3, text=[artista])])
+                tags.setall('TPE2', [TPE2(encoding=3, text=[artista])])
+            if album:
+                tags.setall('TALB', [TALB(encoding=3, text=[album])])
+            if fecha:
+                tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+            tags.save(str(p), v2_version=3)
+        elif ext == '.wav':
+            from mutagen.id3 import TALB, TDRC, TIT2, TPE1, TPE2
+            from mutagen.wave import WAVE
+            w = WAVE(str(p))
+            if w.tags is None:
+                w.add_tags()
+            if titulo:
+                w.tags.setall('TIT2', [TIT2(encoding=3, text=[titulo])])
+            if artista:
+                w.tags.setall('TPE1', [TPE1(encoding=3, text=[artista])])
+                w.tags.setall('TPE2', [TPE2(encoding=3, text=[artista])])
+            if album:
+                w.tags.setall('TALB', [TALB(encoding=3, text=[album])])
+            if fecha:
+                w.tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+            w.save()
+        elif ext == '.flac':
+            from mutagen.flac import FLAC
+            f = FLAC(str(p))
+            if titulo:
+                f['title'] = [titulo]
+            if artista:
+                f['artist'] = [artista]
+                f['albumartist'] = [artista]
+            if album:
+                f['album'] = [album]
+            if fecha:
+                f['date'] = [fecha]
+            f.save()
+        elif ext == '.wma':
+            from mutagen.asf import ASF
+            a = ASF(str(p))
+            if titulo:
+                a['Title'] = [titulo]
+            if artista:
+                a['Author'] = [artista]
+                a['WM/AlbumArtist'] = [artista]
+            if album:
+                a['WM/AlbumTitle'] = [album]
+            if fecha:
+                a['WM/Year'] = [fecha]
+            a.save()
+        else:
+            return
+        if log:
+            log('Etiquetas escritas: artista «%s» · álbum «%s»'
+                % (artista or '—', album or '—'), 'gris')
+    except Exception as e:
+        # las etiquetas no son criticas: nunca deben romper la descarga
+        if log:
+            log('No se pudieron escribir todas las etiquetas: %s' % e,
+                'aviso')
+
+
 # ---------------------------------------------------------------- descargas
 def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     """AAC (.m4a) / MP3 / FLAC / WAV vía postprocesadores de yt-dlp."""
@@ -480,6 +611,8 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     archivo = archivo_final(info, carpeta, codec)
     if archivo and con_portada:
         limpiar_miniaturas(carpeta, archivo)
+    if archivo:
+        aplicar_tags(info, archivo, log)
     return info, archivo
 
 
@@ -514,7 +647,6 @@ def descargar_wma(url, calidad, destino, embeber, cola):
             meta += ['-metadata', 'title=' + str(info['title'])]
         if artista:
             meta += ['-metadata', 'artist=' + str(artista)]
-        meta += ['-metadata', 'album=YouTube']
     wma = carpeta / (limpiar_nombre(info.get('title') or 'audio') + '.wma')
     cmd = [str(FFMPEG), '-y', '-i', str(wav), '-vn',
            '-c:a', 'wmav2', '-b:a', f'{calidad}k'] + meta + [str(wma)]
@@ -522,6 +654,7 @@ def descargar_wma(url, calidad, destino, embeber, cola):
         cmd, f'Convirtiendo a WMA (wmav2 · {calidad} kbps)', cola)
     if not ok:
         raise RuntimeError('FFmpeg no pudo crear el archivo WMA.')
+    aplicar_tags(info, wma, log)
     shutil.rmtree(tmp, ignore_errors=True)
     return info, wma
 

@@ -5,21 +5,30 @@ rem  ----------------------------------------------------------------
 rem  Este unico archivo .bat:
 rem    [1] Restaura la aplicacion (script Python embebido en base64)
 rem    [2] Comprueba Python 3.9+ con Tkinter; si falta, descarga un
-rem        Python portatil COMPLETO en la carpeta "runtime"
-rem        (sin permisos de administrador; incluye la interfaz grafica)
+rem        Python portatil COMPLETO dentro de la carpeta de datos
+rem        %APPDATA%\MusikALAN\runtime (sin permisos de administrador;
+rem        incluye la interfaz grafica)
 rem    [3] Instala yt-dlp y mutagen con pip si no estan
 rem    [4] Comprueba FFmpeg ; si falta, lo descarga de los espejos
 rem        rapidos de GitHub (GyanD / BtbN) y de gyan.dev de reserva
 rem    [5] Abre la ventana de descargas (YouTube Downloader)
 rem  Requisitos: Windows 10 1803 o superior. Internet solo la primera vez.
+rem  Desde la v2.4 todo se instala en %APPDATA%\MusikALAN aunque el .bat
+rem  este en Descargas; una instalacion vieja junto al .bat se mueve sola.
 rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title MusikALAN v2.3
+title MusikALAN v2.4
 cd /d "%~dp0"
 
+rem --- carpeta de datos del programa: %APPDATA%\MusikALAN ---
+rem Desde la v2.4 los componentes (script, Python, FFmpeg) se guardan en
+rem AppData, NO junto al .bat, para no llenar la carpeta de Descargas.
 set "APPDIR=%~dp0"
+if defined APPDATA set "APPDIR=%APPDATA%\MusikALAN\"
+if not exist "%APPDIR%" mkdir "%APPDIR%" 2>nul
+if not exist "%APPDIR%" set "APPDIR=%~dp0"
 set "RUNTIME=%APPDIR%runtime"
 set "FFDIR=%APPDIR%ffmpeg"
 set "SCRIPT=%APPDIR%descargador.py"
@@ -69,14 +78,22 @@ echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_
 echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%MusikALAN v2.3%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.4%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo    Sistema : Windows 10 o superior, %ARCH%
-echo    Carpeta : %APPDIR%
-echo    Destino : %APPDATA%\MusikALAN
+echo    Datos   : %APPDIR%
+echo    Musica  : las canciones se guardan en tu carpeta de Musica
 echo.
+
+rem --- migracion: si hay una instalacion antigua junto al .bat, se
+rem     mueve a la carpeta de datos para no descargarla otra vez ---
+if not exist "%SCRIPT%" if exist "%~dp0descargador.py" move /y "%~dp0descargador.py" "%SCRIPT%" >nul 2>nul
+if not exist "%APPDIR%ajustes.json" if exist "%~dp0ajustes.json" move /y "%~dp0ajustes.json" "%APPDIR%ajustes.json" >nul 2>nul
+if not exist "%RUNTIME%\python\python.exe" if exist "%~dp0runtime" call :migrar_carpeta "%~dp0runtime" "%RUNTIME%" "%RUNTIME%\python\python.exe"
+if not exist "%FFDIR%\bin\ffmpeg.exe" if exist "%~dp0ffmpeg" call :migrar_carpeta "%~dp0ffmpeg" "%FFDIR%" "%FFDIR%\bin\ffmpeg.exe"
+if exist "%~dp0_instalacion_tmp" rmdir /s /q "%~dp0_instalacion_tmp" 2>nul
 
 echo  %C_INFO%[1/5]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
 if "%~1"=="--reinstalar" if exist "%SCRIPT%" del /q "%SCRIPT%"
@@ -188,11 +205,12 @@ if defined SEG if %SEG% GTR 0 set "SEG_TXT=   (tardo %SEG% segundos)"
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo   %C_OK%Instalacion completada%C_FIN%%SEG_TXT%
-echo   Descargas en: %APPDATA%\MusikALAN (cambiable en la ventana)
+echo   El programa vive en: %APPDIR%
+echo   La musica se guarda en tu carpeta de Musica.
 echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title MusikALAN v2.3 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+title MusikALAN v2.4 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if defined GUIEXE goto lanzar_gui
 echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
 echo    deja esta consola abierta mientras uses el programa.
@@ -211,7 +229,8 @@ echo.
 echo  %C_ERR%El programa se cerro con un error.%C_FIN% Sugerencias:
 echo    - Ejecuta este archivo de nuevo.
 echo    - Revisa el archivo descargador_errores.log si existe.
-echo    - Borra las carpetas "runtime" y "ffmpeg" y ejecuta de nuevo.
+echo    - Borra las carpetas "runtime" y "ffmpeg" que hay dentro de
+echo      %APPDIR% y ejecuta este archivo de nuevo.
 goto fin_pausa
 
 :fin_error
@@ -344,3 +363,20 @@ tar -xf "%~1" -C "%~2" >nul 2>nul
 if not errorlevel 1 exit /b 0
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%~1' -DestinationPath '%~2' -Force"
 exit /b %errorlevel%
+
+:migrar_carpeta
+rem  Uso: call :migrar_carpeta "carpeta vieja" "destino nuevo" "archivo clave"
+rem  Mueve una instalacion antigua (la que quedo junto al .bat) hacia la
+rem  carpeta de datos de AppData. Si algo falla, el flujo normal la
+rem  descargara de cero sin quejarse.
+if exist "%~3" exit /b 0
+if not exist "%~1" exit /b 0
+echo    %C_INFO%Moviendo%C_FIN% la carpeta "%~nx1" a su nueva ubicacion...
+if not exist "%~2" move "%~1" "%~2" >nul 2>nul
+if exist "%~3" goto migrar_fin
+robocopy "%~1" "%~2" /e /move /nfl /ndl /njh /njs >nul 2>nul
+if not exist "%~3" exit /b 0
+:migrar_fin
+rmdir /s /q "%~1" >nul 2>nul
+echo    %C_OK%OK%C_FIN% "%~nx1" ya esta en la carpeta de datos.
+exit /b 0

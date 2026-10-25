@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.3  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.4  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,16 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.4: los reproductores ahora muestran SIEMPRE el artista y
+el álbum de cada canción (antes salían vacíos o como "X - Topic"); el
+programa limpia el nombre del artista, pone el álbum correcto (el de
+la playlist si descargas una lista) y escribe también título y año en
+los 5 formatos de audio. Además, todo lo que instala el .bat (Python,
+FFmpeg, el propio programa y sus ajustes) va ahora a
+C:\Users\TU_USUARIO\AppData\Roaming\MusikALAN, aunque el .bat esté en
+Descargas; si tenías la instalación junto al .bat, se mueve sola a la
+nueva carpeta la primera vez (no descarga nada otra vez).
 
 Novedades v2.3: la carpeta de guardado por defecto es ahora la carpeta
 Música de Windows (migra sola la carpeta antigua), los archivos van
@@ -38,8 +48,8 @@ Telegram, Drive, USB, etc. Cada amigo lo guarda en SU propia carpeta
 
 CÓMO SE USA
 -----------
-1. Guarda DescargadorMusica.bat en una carpeta propia (no dentro de
-   Archivos de Programa, y mejor fuera de OneDrive).
+1. Guarda DescargadorMusica.bat donde quieras (puede estar en
+   Descargas; el programa NO se instala ahí).
 2. Doble clic. La primera vez descarga lo que falte:
       · Python portátil COMPLETO (~42 MB; ~26 MB en ARM64) con
         interfaz gráfica, solo si tu PC no tiene Python 3.9+ con Tkinter
@@ -75,16 +85,20 @@ Si Windows SmartScreen avisa al ejecutarlo: clic en "Más info" →
 
 DÓNDE QUEDA CADA COSA
 ---------------------
-Junto al .bat se crean estas carpetas:
-   runtime\python\   Python portátil completo (solo si hubo que
-                     instalarlo; en v1 era runtime\ y se ignora)
-   ffmpeg\bin\       FFmpeg portable (solo si hubo que instalarlo)
-   _instalacion_tmp  temporal de la instalación (se borra sola)
-
-Y estos archivos de la aplicación:
+Desde la v2.4, todo lo que instala el .bat vive en la carpeta de datos
+      C:\Users\TU_USUARIO\AppData\Roaming\MusikALAN\
+   runtime\python\         Python portátil completo (solo si hubo que
+                           instalarlo)
+   ffmpeg\bin\             FFmpeg portable (solo si hubo que instalarlo)
    descargador.py          la propia ventana (extraída del .bat)
    ajustes.json            tus preferencias (tema, formato, carpeta...)
    descargador_errores.log solo si hubo un fallo grave
+   _instalacion_tmp        temporal de la instalación (se borra sola)
+
+Si venías de la v2.3 o anterior (todo junto al .bat): la primera vez
+que ejecutes la v2.4, el instalador MUEVE solo esas carpetas y
+archivos a la carpeta de datos, sin descargar nada otra vez; en
+Descargas solo queda el .bat.
 
 Las descargas se guardan en:
       C:\Users\TU_USUARIO\Music\
@@ -100,9 +114,9 @@ quieres tenerlos todos juntos.
 
 FORMATOS Y PARÁMETROS TÉCNICOS
 ------------------------------
-AAC   .m4a   AAC 96 / 128 kbps. Con título, artista y carátula.
+AAC   .m4a   AAC 96 / 128 kbps. Con título, artista, álbum y carátula.
 MP3   .mp3   96 / 128 / 192 / 256 / 320 kbps (desplegable Calidad).
-             Con título, artista y carátula incrustada.
+             Con título, artista, álbum y carátula incrustada.
 FLAC  .flac  sin pérdida. Con etiquetas y carátula.
 WAV   .wav   sin pérdida (archivos MUY grandes). Con etiquetas.
 WMA   .wma   WMA Standard v2 a 96 / 128 kbps, ideal para
@@ -121,6 +135,13 @@ AVI   .avi   video para el reproductor "sheiju" MP3 de 1.8" con
    vertical). Si el video es cuadrado o vertical (un Short, por
    ejemplo), el recorte original sería imposible y el programa
    reintenta solo, en "modo compatible" con bandas (letterbox).
+
+Sobre las etiquetas: desde la v2.4 todos los formatos de audio
+llevan escritas en el propio archivo el título, el artista (sin el
+sufijo " - Topic" de los canales de YouTube), el álbum (el de la
+playlist si descargas una lista; si es una canción suelta, el propio
+artista) y el año. Así los reproductores de música siempre muestran
+artista y álbum.
 
 Notas honestas:
 · FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
@@ -146,10 +167,10 @@ MANTENIMIENTO Y PROBLEMAS FRECUENTES
       DescargadorMusica.bat --reinstalar
   (borra descargador.py y lo vuelve a extraer del propio .bat).
 · Quiero un "reset de fábrica": borra las carpetas "runtime" y
-  "ffmpeg" junto al .bat y vuelve a ejecutarlo.
-· Tenías la v1: no pasa nada; la carpeta runtime antigua queda
-  ignorada y tus ajustes (carpeta destino) se conservan. Para limpiar,
-  borra "runtime" tras actualizar una vez.
+  "ffmpeg" que hay dentro de AppData\Roaming\MusikALAN y vuelve a
+  ejecutar el .bat.
+· Tenías la v1: no pasa nada; la carpeta runtime antigua (junto al
+  .bat) se ignora y se puede borrar a mano tras actualizar una vez.
 · El antivirus grita con el FFmpeg descargado: es un falso positivo
   común; usa versiones de gyan.dev/BtbN (proveedores conocidos) o
   agrega una excepción para la carpeta del programa.
