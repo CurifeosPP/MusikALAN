@@ -11,8 +11,8 @@ pulgadas y pantalla 128x160):
   · MP3  (.mp3)  96 / 128 / 192 / 256 / 320 kbps (desplegable "Calidad")
   · FLAC (.flac) sin perdida
   · WAV  (.wav)  sin perdida (archivos grandes)
-  · WMA  (.wma)  96 / 128 kbps (codificador wmav2 de FFmpeg; el contenedor
-                 ASF no admite caratula incrustada)
+  · WMA  (.wma)  96 / 128 kbps (codificador wmav2 de FFmpeg, con caratula
+                 y URL incrustadas via mutagen: WM/Picture + WM/AuthorURL)
   · AVI  (.avi)  video recodificado para el reproductor sheiju 1.8"
                  128x160, con los parametros oficiales del repositorio
                  github.com/fdd4s/portable_mp3_player_video_converter_tools
@@ -24,8 +24,11 @@ diario (tema oscuro/claro, estimacion de tamano y comprobador de
 calidad de la carpeta). La carpeta de guardado por defecto es la
 carpeta Musica de Windows, y los archivos van directos a ella, sin
 subcarpetas por formato. Tras cada descarga se escriben las etiquetas
-del archivo (artista sin el sufijo " - Topic", album, titulo y ano)
-para que todos los reproductores las muestren.
+del archivo (artista sin el sufijo " - Topic", album, titulo, ano y URL)
+para que todos los reproductores las muestren, y la caratula SIEMPRE
+se incrusta en JPEG: la miniatura de YouTube viene en WebP y muchos
+reproductores baratos solo leen JPEG (igual que --convert-thumbnails
+jpg del comando antiguo, que es lo que si funcionaba).
 
 Uso:  python descargador.py   (o doble clic en DescargadorMusica.bat)
 Si la URL pertenece a una lista de reproduccion, el programa pregunta
@@ -40,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -47,7 +51,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.4'
+APP_V = '2.5'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -306,6 +310,7 @@ REGISTRO = Registro()
 
 NOMBRES_PP = {
     'FFmpegExtractAudio': 'Convirtiendo el audio con FFmpeg',
+    'FFmpegThumbnailsConvertor': 'Convirtiendo la carátula a JPG',
     'FFmpegMetadata': 'Escribiendo etiquetas (título/artista)',
     'EmbedThumbnail': 'Incrustando la carátula',
     'MoveFiles': 'Organizando archivos',
@@ -454,6 +459,68 @@ def limpiar_miniaturas(carpeta, archivo):
                 pass
 
 
+def _miniatura_bytes(carpeta, archivo):
+    """Lee los bytes de la miniatura que yt-dlp dejo junto al archivo final."""
+    if not archivo:
+        return None
+    for ext in ('.jpg', '.jpeg', '.webp', '.png'):
+        t = archivo.with_suffix(ext)
+        if t.exists():
+            try:
+                return t.read_bytes()
+            except OSError:
+                pass
+    return None
+
+
+def _es_jpg(datos):
+    return bool(datos) and datos[:3] == b'\xff\xd8\xff'
+
+
+def _a_jpg(datos):
+    """Convierte los bytes de una imagen (webp/png/...) a JPEG con FFmpeg.
+
+    Los reproductores baratos (tipo sheiju) suelen leer solo JPEG: la
+    miniatura de YouTube viene en WebP y EmbedThumbnail de yt-dlp la
+    convierte a PNG ("PNG is preferred since JPEG is lossy"), asi que
+    aqui nos aseguramos nosotros de que acabe en JPEG."""
+    if not datos or not FFMPEG:
+        return None
+    base = Path(tempfile.gettempdir()) / ('musikalan_caratula_%d' % os.getpid())
+    origen, destino = base.with_suffix('.orig'), base.with_suffix('.jpg')
+    try:
+        origen.write_bytes(datos)
+        r = subprocess.run(
+            [str(FFMPEG), '-y', '-loglevel', 'error', '-i', str(origen),
+             '-q:v', '2', str(destino)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode == 0 and destino.exists():
+            jpg = destino.read_bytes()
+            if _es_jpg(jpg):
+                return jpg
+    except Exception:
+        pass
+    finally:
+        for f in (origen, destino):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    return None
+
+
+def _wm_picture(jpg, descripcion=''):
+    """Empaqueta unos bytes JPEG en el atributo WM/Picture del contenedor
+    ASF (tipo 3 = portada frontal), como hacia el script antiguo."""
+    def u16(s):
+        return str(s).encode('utf-16-le') + b'\x00\x00'
+
+    mime = u16('image/jpeg')
+    desc = u16(descripcion)
+    return (b'\x03' + len(mime).to_bytes(4, 'little') + mime
+            + len(desc).to_bytes(4, 'little') + desc + jpg)
+
+
 # ---------------------------------------------------------------- etiquetas
 def _artista_limpio(info):
     """Nombre del artista legible para reproductores.
@@ -480,13 +547,19 @@ def _album_de(info):
     return _artista_limpio(info) or 'YouTube'
 
 
-def aplicar_tags(info, archivo, log=None):
+def aplicar_tags(info, archivo, log=None, caratula=None):
     """Escribe con mutagen las etiquetas del archivo final.
 
     Garantiza que TODOS los reproductores muestren artista y album,
-    aunque FFmpegMetadata de yt-dlp no los haya escrito. La caratula
-    que EmbedThumbnail ya incrusto se conserva (solo se tocan las
-    claves de texto). Formatos: m4a, mp3, wav, flac y wma."""
+    aunque FFmpegMetadata de yt-dlp no los haya escrito. Ademas:
+      · la caratula siempre acaba en JPEG (yt-dlp incrusta las
+        miniaturas de YouTube como PNG/WebP y muchos reproductores
+        baratos solo leen JPEG; cuando el parser de la caratula falla,
+        dejan de mostrar tambien artista y album);
+      · si EmbedThumbnail no incrusto nada, se incrusta `caratula`;
+      · el comentario guarda la URL del video (como el script antiguo);
+      · WMA lleva caratula (WM/Picture) y URL (WM/AuthorURL) via mutagen.
+    `caratula` son los bytes de la miniatura descargada (opcional)."""
     try:
         p = Path(archivo)
         if not p.exists():
@@ -499,9 +572,12 @@ def aplicar_tags(info, archivo, log=None):
             fecha = str(info.get('upload_date') or '')
             if len(fecha) == 8 and fecha.isdigit():
                 fecha = fecha[:4]
+        url = str(info.get('webpage_url') or '').strip()
+        if caratula and not _es_jpg(caratula):
+            caratula = _a_jpg(caratula)
         ext = p.suffix.lower()
         if ext == '.m4a':
-            from mutagen.mp4 import MP4
+            from mutagen.mp4 import MP4, MP4Cover
             m = MP4(str(p))
             if titulo:
                 m['\xa9nam'] = [titulo]
@@ -512,9 +588,30 @@ def aplicar_tags(info, archivo, log=None):
                 m['\xa9alb'] = [album]
             if fecha:
                 m['\xa9day'] = [fecha]
+            if url:
+                m['\xa9cmt'] = [url]
+            # -- caratula: garantizamos JPEG SIEMPRE (tambien cuando
+            #    EmbedThumbnail ya incrusto algo); `caratula` es el plan B
+            #    si no quedo ninguna. yt-dlp/EmbedThumbnail usa el atomo
+            #    estandar 'covr' (sin el prefijo (c)); en mutagen moderno
+            #    escribir '\xa9covr' lanza TypeError.
+            viejas = m.get('covr') or m.get('\xa9covr') or []
+            if not viejas:
+                if caratula:
+                    m['covr'] = [MP4Cover(caratula, MP4Cover.FORMAT_JPEG)]
+            elif all(c.imageformat != MP4Cover.FORMAT_JPEG
+                     for c in viejas):
+                nueva = _a_jpg(bytes(viejas[0])) or caratula
+                if nueva:
+                    m['covr'] = [MP4Cover(nueva, MP4Cover.FORMAT_JPEG)]
+                    m.pop('\xa9covr', None)
+            elif m.get('\xa9covr'):
+                m['covr'] = viejas
+                m.pop('\xa9covr', None)
             m.save()
         elif ext == '.mp3':
-            from mutagen.id3 import ID3, TALB, TDRC, TIT2, TPE1, TPE2
+            from mutagen.id3 import (APIC, COMM, ID3, TALB, TDRC, TIT2,
+                                     TPE1, TPE2)
             try:
                 tags = ID3(str(p))
             except Exception:
@@ -528,9 +625,25 @@ def aplicar_tags(info, archivo, log=None):
                 tags.setall('TALB', [TALB(encoding=3, text=[album])])
             if fecha:
                 tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+            if url:
+                tags.setall('COMM', [COMM(encoding=3, lang='eng',
+                                          desc='', text=[url])])
+            apics = tags.getall('APIC')
+            if not apics:
+                if caratula:
+                    tags.setall('APIC', [APIC(encoding=3, mime='image/jpeg',
+                                              type=3, desc='Cover',
+                                              data=caratula)])
+            elif all(a.mime != 'image/jpeg' for a in apics):
+                nueva = _a_jpg(apics[0].data) or caratula
+                if nueva:
+                    tags.setall('APIC', [APIC(encoding=3, mime='image/jpeg',
+                                              type=apics[0].type or 3,
+                                              desc=apics[0].desc or 'Cover',
+                                              data=nueva)])
             tags.save(str(p), v2_version=3)
         elif ext == '.wav':
-            from mutagen.id3 import TALB, TDRC, TIT2, TPE1, TPE2
+            from mutagen.id3 import COMM, TDRC, TIT2, TPE1, TPE2, TALB
             from mutagen.wave import WAVE
             w = WAVE(str(p))
             if w.tags is None:
@@ -544,9 +657,12 @@ def aplicar_tags(info, archivo, log=None):
                 w.tags.setall('TALB', [TALB(encoding=3, text=[album])])
             if fecha:
                 w.tags.setall('TDRC', [TDRC(encoding=3, text=[fecha])])
+            if url:
+                w.tags.setall('COMM', [COMM(encoding=3, lang='eng',
+                                            desc='', text=[url])])
             w.save()
         elif ext == '.flac':
-            from mutagen.flac import FLAC
+            from mutagen.flac import FLAC, Picture
             f = FLAC(str(p))
             if titulo:
                 f['title'] = [titulo]
@@ -557,9 +673,26 @@ def aplicar_tags(info, archivo, log=None):
                 f['album'] = [album]
             if fecha:
                 f['date'] = [fecha]
+            if url:
+                f['comment'] = [url]
+            if not f.pictures:
+                if caratula:
+                    pic = Picture()
+                    pic.mime, pic.type, pic.desc = 'image/jpeg', 3, 'Cover'
+                    pic.data = caratula
+                    f.add_picture(pic)
+            elif all(pi.mime != 'image/jpeg' for pi in f.pictures):
+                nueva = _a_jpg(f.pictures[0].data) or caratula
+                if nueva:
+                    for vieja in list(f.pictures):
+                        f.remove_picture(vieja)
+                    pic = Picture()
+                    pic.mime, pic.type, pic.desc = 'image/jpeg', 3, 'Cover'
+                    pic.data = nueva
+                    f.add_picture(pic)
             f.save()
         elif ext == '.wma':
-            from mutagen.asf import ASF
+            from mutagen.asf import ASF, ASFByteArrayAttribute
             a = ASF(str(p))
             if titulo:
                 a['Title'] = [titulo]
@@ -570,12 +703,19 @@ def aplicar_tags(info, archivo, log=None):
                 a['WM/AlbumTitle'] = [album]
             if fecha:
                 a['WM/Year'] = [fecha]
+            if url:
+                a['Description'] = [url]
+                a['WM/AuthorURL'] = [url]
+            if caratula:
+                a['WM/Picture'] = [ASFByteArrayAttribute(
+                    _wm_picture(caratula, titulo or 'Cover'))]
             a.save()
         else:
             return
         if log:
-            log('Etiquetas escritas: artista «%s» · álbum «%s»'
-                % (artista or '—', album or '—'), 'gris')
+            extra = ' · carátula JPEG' if caratula else ''
+            log('Etiquetas escritas: artista «%s» · álbum «%s»%s'
+                % (artista or '—', album or '—', extra), 'gris')
     except Exception as e:
         # las etiquetas no son criticas: nunca deben romper la descarga
         if log:
@@ -585,7 +725,13 @@ def aplicar_tags(info, archivo, log=None):
 
 # ---------------------------------------------------------------- descargas
 def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
-    """AAC (.m4a) / MP3 / FLAC / WAV vía postprocesadores de yt-dlp."""
+    """AAC (.m4a) / MP3 / FLAC / WAV vía postprocesadores de yt-dlp.
+
+    La carátula se convierte a JPG ANTES de incrustarla (mismo orden y
+    claves que genera el CLI con --convert-thumbnails jpg):
+    EmbedThumbnail solo convierte las miniaturas WebP de YouTube a PNG
+    ("PNG is preferred since JPEG is lossy") y los reproductores
+    baratos suelen leer solo JPEG."""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
@@ -595,8 +741,12 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     codec = fmt['ext']
     con_portada = embeber and nombre_fmt in ('AAC', 'MP3', 'FLAC')
     con_tags = embeber
-    pps = [{'key': 'FFmpegExtractAudio', 'preferredcodec': codec,
-            'preferredquality': calidad or '0'}]
+    pps = []
+    if con_portada:
+        pps.append({'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg',
+                    'when': 'before_dl'})
+    pps.append({'key': 'FFmpegExtractAudio', 'preferredcodec': codec,
+                'preferredquality': calidad or '0'})
     if con_tags:
         pps.append({'key': 'FFmpegMetadata', 'add_metadata': True})
     if con_portada:
@@ -609,17 +759,19 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     with YT_DLP.YoutubeDL(o) as ydl:
         info = ydl.extract_info(url, download=True)
     archivo = archivo_final(info, carpeta, codec)
+    caratula = _miniatura_bytes(carpeta, archivo)
     if archivo and con_portada:
         limpiar_miniaturas(carpeta, archivo)
     if archivo:
-        aplicar_tags(info, archivo, log)
+        aplicar_tags(info, archivo, log, caratula)
     return info, archivo
 
 
 def descargar_wma(url, calidad, destino, embeber, cola):
     """WMA 96/128 kbps: yt-dlp no soporta wma, así que se baja a WAV (con
     etiquetas) y luego FFmpeg recodifica a wmav2 dentro del .wma final.
-    (El contenedor ASF de ffmpeg no soporta carátula incrustada.)"""
+    La carátula (WM/Picture, en JPEG) y la URL (WM/AuthorURL) se
+    incrustan con mutagen, como en el script antiguo."""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
@@ -632,8 +784,11 @@ def descargar_wma(url, calidad, destino, embeber, cola):
     pps = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav',
             'preferredquality': '0'}]
     if embeber:
+        pps.insert(0, {'key': 'FFmpegThumbnailsConvertor',
+                       'format': 'jpg', 'when': 'before_dl'})
         pps.append({'key': 'FFmpegMetadata', 'add_metadata': True})
     o['postprocessors'] = pps
+    o['writethumbnail'] = embeber
     with YT_DLP.YoutubeDL(o) as ydl:
         info = ydl.extract_info(url, download=True)
     wav = archivo_final(info, tmp, 'wav')
@@ -654,7 +809,16 @@ def descargar_wma(url, calidad, destino, embeber, cola):
         cmd, f'Convirtiendo a WMA (wmav2 · {calidad} kbps)', cola)
     if not ok:
         raise RuntimeError('FFmpeg no pudo crear el archivo WMA.')
-    aplicar_tags(info, wma, log)
+    caratula = None
+    if embeber:
+        jpgs = sorted(tmp.glob('*.jpg'),
+                      key=lambda q: q.stat().st_mtime, reverse=True)
+        if jpgs:
+            try:
+                caratula = jpgs[0].read_bytes()
+            except OSError:
+                caratula = None
+    aplicar_tags(info, wma, log, caratula)
     shutil.rmtree(tmp, ignore_errors=True)
     return info, wma
 

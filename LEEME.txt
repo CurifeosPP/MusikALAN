@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.4  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.5  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,15 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.5: la carátula SIEMPRE se incrusta en JPEG (la miniatura
+que da YouTube es WebP y muchos reproductores baratos —tipo sheiju—
+solo leen JPEG: cuando la carátula se atragantaba, dejaban de mostrar
+también artista y álbum; es el mismo truco que el comando antiguo con
+"--convert-thumbnails jpg", que era el que sí funcionaba). El WMA
+ahora también lleva carátula (WM/Picture) y la URL de la canción
+(WM/AuthorURL), y todos los formatos guardan la URL en el comentario
+de la etiqueta.
 
 Novedades v2.4: los reproductores ahora muestran SIEMPRE el artista y
 el álbum de cada canción (antes salían vacíos o como "X - Topic"); el
@@ -141,7 +150,9 @@ llevan escritas en el propio archivo el título, el artista (sin el
 sufijo " - Topic" de los canales de YouTube), el álbum (el de la
 playlist si descargas una lista; si es una canción suelta, el propio
 artista) y el año. Así los reproductores de música siempre muestran
-artista y álbum.
+artista y álbum. Desde la v2.5, además, la carátula va garantizada
+en JPEG en AAC/MP3/FLAC (y en WMA con WM/Picture), con la URL de la
+canción en el comentario.
 
 Notas honestas:
 · FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
