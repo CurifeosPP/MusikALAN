@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  DESCARGADOR DE MÚSICA v2.0  —  YouTube Downloader (ventana)
+  DESCARGADOR DE MÚSICA v2.1  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,11 @@ permisos de administrador) y luego abre la ventana "YouTube
 Downloader": una interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, cookies de navegador, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.1: instalador de consola rediseñado (banner, colores y
+resumen con tiempo total) y FFmpeg se descarga ahora de los espejos
+rápidos de GitHub (6-7x más veloz que el servidor antiguo, que queda
+de reserva).
 
 Cómo compartirlo: envía SOLO DescargadorMusica.bat por WhatsApp,
 Telegram, Drive, USB, etc. Cada amigo lo guarda en SU propia carpeta

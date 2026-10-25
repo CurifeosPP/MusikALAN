@@ -24,7 +24,8 @@ descargas.
 - Barra de progreso con %, velocidad y tiempo restante + registro de actividad
 - Solo videos individuales: si la URL trae `list=`, la lista se ignora
 - Instalación 100% portable y sin admin: Python build standalone + yt-dlp +
-  mutagen + FFmpeg (gyan.dev/BtbN) en carpetas locales
+  mutagen + FFmpeg (espejos rápidos de GitHub: GyanD y BtbN, con gyan.dev de
+  reserva) en carpetas locales
 - Comprobación de versión de yt-dlp contra PyPI al arrancar y actualización
   integrada (Ctrl+U)
 

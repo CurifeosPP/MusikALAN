@@ -8,16 +8,15 @@ rem    [2] Comprueba Python 3.9+ con Tkinter; si falta, descarga un
 rem        Python portatil COMPLETO en la carpeta "runtime"
 rem        (sin permisos de administrador; incluye la interfaz grafica)
 rem    [3] Instala yt-dlp y mutagen con pip si no estan
-rem    [4] Comprueba FFmpeg ; si falta, descarga una version portable
-rem        (gyan.dev o BtbN) en la carpeta "ffmpeg"
+rem    [4] Comprueba FFmpeg ; si falta, lo descarga de los espejos
+rem        rapidos de GitHub (GyanD / BtbN) y de gyan.dev de reserva
 rem    [5] Abre la ventana de descargas (YouTube Downloader)
 rem  Requisitos: Windows 10 1803 o superior. Internet solo la primera vez.
 rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
+rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title Descargador de Musica
-color 0B
-cls
+title Descargador de Musica v2.1
 cd /d "%~dp0"
 
 set "APPDIR=%~dp0"
@@ -34,30 +33,66 @@ if defined PROCESSOR_ARCHITEW6432 set "ARCH=%PROCESSOR_ARCHITEW6432%"
 
 if not exist "%TMPDIR%" mkdir "%TMPDIR%"
 
+rem --- capturar el caracter ESC y activar colores ANSI (Windows 10+) ---
+rem Si no se logra, las variables C_* quedan vacias y el texto sale
+rem plano pero funcional (degradacion segura, nunca se corta el flujo).
+set "ESC="
+for /f "delims=" %%E in ('forfiles /m "%~nx0" /c "cmd /c echo 0x1B" 2^>nul') do set "ESC=%%E"
+set "C_FIN="
+set "C_TIT="
+set "C_OK="
+set "C_INFO="
+set "C_AVI="
+set "C_ERR="
+set "C_GRI="
+if defined ESC (
+    set "C_FIN=%ESC%[0m"
+    set "C_TIT=%ESC%[1;96m"
+    set "C_OK=%ESC%[92m"
+    set "C_INFO=%ESC%[96m"
+    set "C_AVI=%ESC%[93m"
+    set "C_ERR=%ESC%[1;91m"
+    set "C_GRI=%ESC%[90m"
+    color 0F
+) else (
+    color 0B
+)
+set "TINI=%time: =0%"
+
+cls
 echo.
-echo  ==================================================================
-echo    DESCARGADOR DE MUSICA  -  preparando el entorno (un momento)
-echo  ==================================================================
+echo  %C_TIT% ___  ___ ___  ___   _   ___  ___   _   ___   ___  ___%C_FIN%
+echo  %C_TIT%^|   \^| __/ __^|/ __^| /_\ ^| _ \/ __^| /_\ ^|   \ / _ \^| _ \%C_FIN%
+echo  %C_TIT%^| ^|) ^| _^|\__ \ (__ / _ \^|   / (_ ^|/ _ \^| ^|) ^| (_) ^|   /%C_FIN%
+echo  %C_TIT%^|___/^|___^|___/\___/_/ \_\_^|_\\___/_/ \_\___/ \___/^|_^|_\%C_FIN%
+echo.
+echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
+echo    %C_TIT%Descargador de Musica v2.1%C_FIN% - preparando el entorno
+echo    Instalador portable: no pide permisos de administrador.
+echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
+echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
+echo    Sistema : Windows 10 o superior, %ARCH%
+echo    Carpeta : %APPDIR%
 echo.
 
-echo  [1/5] Preparando la aplicacion (script Python embebido)...
+echo  %C_INFO%[1/5]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
 if "%~1"=="--reinstalar" if exist "%SCRIPT%" del /q "%SCRIPT%"
 if exist "%SCRIPT%" goto script_listo
 for /f "tokens=1 delims=:" %%a in ('findstr /b /c:":::" "%~f0"') do >>"%TMPDIR%\payload.b64" echo(%%a
 certutil -f -decode "%TMPDIR%\payload.b64" "%SCRIPT%" >nul 2>nul
 if errorlevel 1 goto err_payload
 del /q "%TMPDIR%\payload.b64" >nul 2>nul
-echo    OK: descargador.py listo.
+echo    %C_OK%OK%C_FIN% descargador.py restaurado del instalador.
 goto script_listo
 
 :err_payload
-echo    ERROR: no se pudo extraer el script embebido.
+echo    %C_ERR%ERROR%C_FIN% no se pudo extraer el script embebido.
 echo    Vuelve a descargar el archivo DescargadorMusica.bat completo
 echo    (se pudo cortar al copiarlo o enviarlo).
 goto fin_error
 
 :script_listo
-echo  [2/5] Buscando Python con soporte de interfaz grafica...
+echo  %C_INFO%[2/5]%C_FIN% %C_TIT%Buscando Python%C_FIN% con soporte de interfaz grafica...
 if exist "%RUNTIME%\python\python.exe" goto py_portatil
 py -3 -c "import sys,tkinter;sys.exit(not sys.version_info>=(3,9))" >nul 2>nul
 if not errorlevel 1 goto py_sys_py
@@ -70,23 +105,23 @@ goto py_listo
 :py_portatil
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
-echo    OK: Python portatil propio encontrado.
+echo    %C_OK%OK%C_FIN% Python portatil propio (carpeta runtime).
 goto py_listo
 
 :py_sys_py
 set "PYEXE=py"
 set "PYARGS=-3"
-echo    OK: Python del sistema encontrado (py launcher).
+echo    %C_OK%OK%C_FIN% Python del sistema encontrado (py launcher).
 goto py_listo
 
 :py_sys_plain
 set "PYEXE=python"
 set "PYARGS="
-echo    OK: Python del sistema encontrado.
+echo    %C_OK%OK%C_FIN% Python del sistema encontrado.
 goto py_listo
 
 :py_listo
-echo  [3/5] Verificando yt-dlp y mutagen...
+echo  %C_INFO%[3/5]%C_FIN% %C_TIT%Verificando yt-dlp y mutagen%C_FIN%...
 "%PYEXE%" %PYARGS% -c "import pip" >nul 2>nul
 if errorlevel 1 "%PYEXE%" %PYARGS% -m ensurepip --upgrade >nul 2>nul
 "%PYEXE%" %PYARGS% -c "import yt_dlp, mutagen" >nul 2>nul
@@ -94,16 +129,16 @@ if not errorlevel 1 goto ytdlp_ok
 echo    Instalando yt-dlp y mutagen (solo la primera vez, un momento)...
 "%PYEXE%" %PYARGS% -m pip install --upgrade --no-warn-script-location yt-dlp mutagen
 if not errorlevel 1 goto ytdlp_ok
-echo    Reintentando con instalacion por usuario...
+echo    %C_AVI%Aviso%C_FIN% reintentando con instalacion por usuario...
 "%PYEXE%" %PYARGS% -m pip install --upgrade --user --no-warn-script-location yt-dlp mutagen
 if not errorlevel 1 goto ytdlp_ok
-echo    ERROR: no se pudo instalar yt-dlp. Revisa tu conexion a internet.
+echo    %C_ERR%ERROR%C_FIN% no se pudo instalar yt-dlp. Revisa tu conexion a internet.
 goto fin_error
 
 :ytdlp_ok
-echo    OK: yt-dlp y mutagen estan listos.
+echo    %C_OK%OK%C_FIN% yt-dlp y mutagen listos.
 
-echo  [4/5] Buscando FFmpeg...
+echo  %C_INFO%[4/5]%C_FIN% %C_TIT%Buscando FFmpeg%C_FIN%...
 if exist "%FFDIR%\bin\ffmpeg.exe" goto ff_local
 ffmpeg -version >nul 2>nul
 if not errorlevel 1 goto ff_sistema
@@ -112,16 +147,29 @@ if errorlevel 1 goto fin_error
 
 :ff_local
 set "PATH=%FFDIR%\bin;%PATH%"
-echo    OK: FFmpeg listo (carpeta ffmpeg\bin).
+echo    %C_OK%OK%C_FIN% FFmpeg listo (carpeta ffmpeg\bin).
 goto ff_listo
 
 :ff_sistema
-echo    OK: FFmpeg del sistema encontrado.
+echo    %C_OK%OK%C_FIN% FFmpeg del sistema encontrado.
 :ff_listo
 
-echo  [5/5] Todo listo. Abriendo la aplicacion...
+echo  %C_INFO%[5/5]%C_FIN% %C_TIT%Todo listo%C_FIN% - abriendo la aplicacion...
 rmdir /s /q "%TMPDIR%" >nul 2>nul
-title Descargador de Musica - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+set "TEND=%time: =0%"
+set /a "ELA_I=((1%TINI:~0,2%-100)*360000)+((1%TINI:~3,2%-100)*6000)+((1%TINI:~6,2%-100)*100)+(1%TINI:~9,2%-100)" 2>nul
+set /a "ELA_T=((1%TEND:~0,2%-100)*360000)+((1%TEND:~3,2%-100)*6000)+((1%TEND:~6,2%-100)*100)+(1%TEND:~9,2%-100)" 2>nul
+if defined ELA_I if defined ELA_T set /a "SEG=(ELA_T-ELA_I)/100" 2>nul
+set "SEG_TXT="
+if defined SEG if %SEG% GTR 0 set "SEG_TXT=   (tardo %SEG% segundos)"
+echo.
+echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
+echo   %C_OK%Instalacion completada%C_FIN%%SEG_TXT%
+echo   Las descargas quedan en tu carpeta Musica\YTDownloader (cambiable).
+echo   Puedes cerrar esta consola cuando quieras; la ventana es independiente.
+echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
+echo.
+title Descargador de Musica v2.1 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if exist "%RUNTIME%\python\pythonw.exe" goto lanzar_gui
 echo    La ventana de descargas se abre a continuacion.
 echo    Puedes dejar esta consola abierta o cerrarla.
@@ -137,7 +185,7 @@ exit /b 0
 
 :fin_error_run
 echo.
-echo  El programa se cerro con un error. Sugerencias:
+echo  %C_ERR%El programa se cerro con un error.%C_FIN% Sugerencias:
 echo    - Ejecuta este archivo de nuevo.
 echo    - Revisa el archivo descargador_errores.log si existe.
 echo    - Borra las carpetas "runtime" y "ffmpeg" y ejecuta de nuevo.
@@ -145,7 +193,7 @@ goto fin_pausa
 
 :fin_error
 echo.
-echo  La instalacion no se completo. Ejecuta este archivo de nuevo
+echo  %C_ERR%La instalacion no se completo.%C_FIN% Ejecuta este archivo de nuevo
 echo  y revisa tu conexion a internet.
 :fin_pausa
 echo.
@@ -155,7 +203,7 @@ exit /b 1
 rem ==================== SUBRUTINAS ====================
 
 :instalar_python
-echo    Python 3.9+ con Tkinter no encontrado en este PC.
+echo    %C_AVI%Aviso%C_FIN% Python 3.9+ con Tkinter no encontrado en este PC.
 set "PBSARCH=x86_64"
 if /i "%ARCH%"=="X86" set "PBSARCH=i686"
 if /i "%ARCH%"=="ARM64" goto ip_arm
@@ -163,14 +211,14 @@ echo    Descargando Python portatil completo, unos 42 MB, solo la primera vez...
 call :Descargar "https://github.com/astral-sh/python-build-standalone/releases/download/20250517/cpython-3.12.10+20250517-%PBSARCH%-pc-windows-msvc-install_only.tar.gz" "%TMPDIR%\python.tar.gz"
 if errorlevel 1 goto ip_err_desc
 if not exist "%RUNTIME%" mkdir "%RUNTIME%"
-echo    Descomprimiendo Python...
+echo    Descomprimiendo Python, un momento...
 tar -xzf "%TMPDIR%\python.tar.gz" -C "%RUNTIME%"
 if errorlevel 1 goto ip_err_tar
 del /q "%TMPDIR%\python.tar.gz" >nul 2>nul
 if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
-echo    OK: Python portatil instalado en la carpeta "runtime".
+echo    %C_OK%OK%C_FIN% Python portatil instalado en la carpeta "runtime".
 exit /b 0
 
 :ip_arm
@@ -186,48 +234,51 @@ if not "%IPEC%"=="0" goto ip_err_zip
 if not exist "%RUNTIME%\python\python.exe" goto ip_err_zip
 set "PYEXE=%RUNTIME%\python\python.exe"
 set "PYARGS="
-echo    OK: Python ARM64 instalado en la carpeta "runtime".
+echo    %C_OK%OK%C_FIN% Python ARM64 instalado en la carpeta "runtime".
 exit /b 0
 
 :ip_err_desc
-echo    ERROR: fallo la descarga. Revisa tu conexion e intentalo de nuevo.
+echo    %C_ERR%ERROR%C_FIN% fallo la descarga. Revisa tu conexion e intentalo de nuevo.
 exit /b 1
 
 :ip_err_tar
-echo    ERROR: no se pudo descomprimir Python con tar.
+echo    %C_ERR%ERROR%C_FIN% no se pudo descomprimir Python con tar.
 echo    Se necesita Windows 10 version 1803 o mas nueva.
 exit /b 1
 
 :ip_err_zip
-echo    ERROR: la instalacion de Python no termino bien.
+echo    %C_ERR%ERROR%C_FIN% la instalacion de Python no termino bien.
 echo    Borra la carpeta "runtime" y ejecuta este archivo de nuevo.
 exit /b 1
 
 :instalar_ffmpeg
-echo    FFmpeg no encontrado en este PC.
+echo    %C_AVI%Aviso%C_FIN% FFmpeg no encontrado en este PC.
 if /i "%ARCH%"=="ARM64" goto ff_url_arm
 if /i "%ARCH%"=="X86" goto ff_url_x86
-echo    Descargando FFmpeg para Windows 64-bit, unos 90 MB, puede tardar...
-call :Descargar "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" "%TMPDIR%\ffmpeg.zip"
+echo    Descargando FFmpeg 64-bit del espejo rapido de GitHub, unos 90 MB...
+call :Descargar "https://github.com/GyanD/codexffmpeg/releases/download/9.0/ffmpeg-9.0-essentials_build.zip" "%TMPDIR%\ffmpeg.zip"
 if not errorlevel 1 goto ff_extraer
-echo    Servidor principal sin respuesta, probando el alternativo (BtbN)...
+echo    %C_AVI%Aviso%C_FIN% espejo 1 fallo, probando espejo 2 (GitHub BtbN)...
 call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip" "%TMPDIR%\ffmpeg.zip"
+if not errorlevel 1 goto ff_extraer
+echo    %C_AVI%Aviso%C_FIN% espejo 2 fallo, probando el servidor clasico (gyan.dev)...
+call :Descargar "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" "%TMPDIR%\ffmpeg.zip"
 if errorlevel 1 goto ff_err_desc
 goto ff_extraer
 
 :ff_url_arm
-echo    Descargando FFmpeg para Windows ARM64...
+echo    Descargando FFmpeg para Windows ARM64 (espejo de GitHub)...
 call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-winarm64-gpl.zip" "%TMPDIR%\ffmpeg.zip"
 if errorlevel 1 goto ff_err_desc
 goto ff_extraer
 
 :ff_url_x86
-echo    Descargando FFmpeg para Windows 32-bit...
+echo    Descargando FFmpeg para Windows 32-bit (espejo de GitHub)...
 call :Descargar "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win32-gpl.zip" "%TMPDIR%\ffmpeg.zip"
 if errorlevel 1 goto ff_err_desc
 
 :ff_extraer
-echo    Descomprimiendo FFmpeg...
+echo    Descomprimiendo FFmpeg, solo unos segundos...
 if exist "%TMPDIR%\ffx" rmdir /s /q "%TMPDIR%\ffx"
 mkdir "%TMPDIR%\ffx"
 call :Extraer "%TMPDIR%\ffmpeg.zip" "%TMPDIR%\ffx"
@@ -236,15 +287,15 @@ if not exist "%FFDIR%" mkdir "%FFDIR%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=(Get-ChildItem -LiteralPath '%TMPDIR%\ffx' -Directory | Select-Object -First 1).FullName; Move-Item -LiteralPath (Join-Path $d 'bin') -Destination '%FFDIR%\bin' -Force"
 if errorlevel 1 goto ff_err_zip
 if not exist "%FFDIR%\bin\ffmpeg.exe" goto ff_err_zip
-echo    OK: FFmpeg instalado en la carpeta "ffmpeg".
+echo    %C_OK%OK%C_FIN% FFmpeg instalado en la carpeta "ffmpeg".
 exit /b 0
 
 :ff_err_desc
-echo    ERROR: fallo la descarga de FFmpeg. Revisa tu conexion.
+echo    %C_ERR%ERROR%C_FIN% fallo la descarga de FFmpeg. Revisa tu conexion.
 exit /b 1
 
 :ff_err_zip
-echo    ERROR: no se pudo descomprimir FFmpeg.
+echo    %C_ERR%ERROR%C_FIN% no se pudo descomprimir FFmpeg.
 exit /b 1
 
 :Descargar
@@ -254,7 +305,7 @@ where curl >nul 2>nul
 if errorlevel 1 goto Descargar_ps
 curl -L -f --retry 3 --retry-delay 2 --connect-timeout 20 -o "%~2" "%~1"
 if not errorlevel 1 exit /b 0
-echo    curl fallo, probando con PowerShell...
+echo    %C_AVI%Aviso%C_FIN% curl fallo, probando con PowerShell...
 :Descargar_ps
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; (New-Object Net.WebClient).DownloadFile('%~1','%~2')"
 exit /b %errorlevel%
