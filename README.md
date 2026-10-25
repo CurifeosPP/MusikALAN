@@ -32,7 +32,11 @@ descargas.
   **carátula va siempre en JPEG** en todos los formatos de audio (covr/APIC/
   Picture/WM/Picture, escrita por MusikALAN y no por el postprocesador de
   yt-dlp, cuyo método interno cambiaba entre versiones) y el **WMA también
-  lleva URL** (WM/AuthorURL)
+  lleva URL** (WM/AuthorURL). Desde la v2.8, además, en el **AAC/M4A las
+  etiquetas quedan al PRINCIPIO del archivo** (átomo moov en posición
+  *faststart*, como lo escribe iTunes): FFmpeg las deja al final, detrás
+  del audio, y los reproductores básicos solo escanean la cabecera, por
+  eso mostraban "unknown" en AAC aunque el MP3 se viera bien
 - **Estimación de tamaño** antes de descargar (por duración del video)
 - **Comprobador de calidad de carpeta** con ffprobe: lista bitrate, duración y
   tamaño de cada archivo y marca los de bitrate bajo

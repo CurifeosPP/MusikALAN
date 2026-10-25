@@ -19,7 +19,7 @@ rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title MusikALAN v2.7
+title MusikALAN v2.8
 cd /d "%~dp0"
 
 rem --- carpeta de datos del programa: %APPDATA%\MusikALAN ---
@@ -78,7 +78,7 @@ echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_
 echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%MusikALAN v2.7%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.8%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
@@ -210,7 +210,7 @@ echo   La musica se guarda en tu carpeta de Musica.
 echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title MusikALAN v2.7 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+title MusikALAN v2.8 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if defined GUIEXE goto lanzar_gui
 echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
 echo    deja esta consola abierta mientras uses el programa.

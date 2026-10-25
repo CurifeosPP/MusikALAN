@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.7'
+APP_V = '2.8'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -533,6 +533,73 @@ def _wm_picture(jpg, descripcion=''):
             + len(desc).to_bytes(4, 'little') + desc + jpg)
 
 
+def _moov_primero(ruta):
+    """True si el atomo 'moov' esta ANTES que 'mdat' entre las cajas
+    top-level del MP4/M4A (el orden 'faststart' de iTunes). Solo lee
+    la cabecera (4 MB) con un pase de tamanos: no carga el archivo."""
+    try:
+        with open(ruta, 'rb') as fh:
+            cab = fh.read(4 << 20)
+    except OSError:
+        return False
+    pos, fin = 0, len(cab)
+    while pos + 8 <= fin:
+        tipo = cab[pos + 4:pos + 8]
+        if tipo in (b'moov', b'mdat'):
+            return tipo == b'moov'
+        size = int.from_bytes(cab[pos:pos + 4], 'big')
+        if size == 1:                       # largesize de 64 bits
+            if pos + 16 > fin:
+                return False
+            size = int.from_bytes(cab[pos + 8:pos + 16], 'big')
+            if size < 16:
+                return False
+        elif size < 8:                      # caja rota o EOF
+            return False
+        pos += size
+    return False
+
+
+def _moov_al_principio(p):
+    """v2.8: deja el atomo moov (que lleva las etiquetas) al PRINCIPIO
+    del .m4a, como hace iTunes ('faststart').
+
+    FFmpeg escribe el M4A con moov AL FINAL, detras de todo el audio
+    (mdat). El MP3 de referencia que el reproductor del usuario si lee
+    lleva su ID3v2 al inicio del archivo, y los reproductores baratos
+    suelen buscar las etiquetas escaneando solo la cabecera del
+    archivo: por eso mostraban 'unknown' aunque el M4A estuviera
+    perfectamente etiquetado (atoms ilst estandar, verificado en
+    v2.7). Con -movflags +faststart el moov entero (y dentro
+    moov.udta.meta.ilst con titulo/artista/album/covr) pasa delante
+    del mdat SIN recodificar nada (-c copy). Si algo falla se devuelve
+    False y el archivo queda como estaba: esto nunca debe romper la
+    descarga ni las etiquetas ya escritas."""
+    if not FFMPEG or _moov_primero(p):
+        return False
+    tmp = p.with_name(p.stem + '.faststart.m4a')
+    try:
+        r = subprocess.run(
+            [str(FFMPEG), '-y', '-loglevel', 'error', '-i', str(p),
+             '-map', '0', '-c', 'copy', '-movflags', '+faststart',
+             str(tmp)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if (r.returncode == 0 and tmp.exists()
+                and _moov_primero(tmp)
+                and tmp.stat().st_size * 100
+                >= p.stat().st_size * 90):
+            os.replace(tmp, p)
+            return True
+    except Exception:
+        pass
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+    return False
+
+
 # ---------------------------------------------------------------- etiquetas
 def _artista_limpio(info):
     """Nombre del artista legible para reproductores.
@@ -573,7 +640,10 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
         baratos descartaban la etiqueta ENTERA (ni artista, ni
         album, ni portada).
       · M4A: atomos MP4 estandar (©nam/©ART/aART/©alb/©day/©cmt) y
-        covr en JPEG, como iTunes.
+        covr en JPEG, como iTunes; ademas (v2.8) el atomo moov queda
+        AL PRINCIPIO del archivo (faststart): ffmpeg lo escribe al
+        final y los reproductores baratos solo escanean la cabecera,
+        por eso mostraban 'unknown' aunque las etiquetas estuvieran.
       · WAV: ID3 dentro del RIFF (mutagen.wave), igual que el MP3,
         mas APIC con la caratula (nuevo en v2.7).
       · FLAC: Vorbis comments + Picture en JPEG.
@@ -602,6 +672,11 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
             caratula = _a_jpg(caratula)
         ext = p.suffix.lower()
         if ext == '.m4a':
+            # v2.8: ANTES de etiquetar, moov (titulo/artista/album/covr)
+            # al principio del archivo; mutagen conserva ese orden.
+            if _moov_al_principio(p) and log:
+                log('M4A reordenado: etiquetas al inicio (faststart, '
+                    'como iTunes)', 'gris')
             from mutagen.mp4 import MP4, MP4Cover
             m = MP4(str(p))
             if titulo:

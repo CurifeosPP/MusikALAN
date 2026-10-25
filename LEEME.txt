@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.7  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.8  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,15 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.8: el AAC (.m4a) por fin muestra artista y álbum en el
+reproductor. El archivo YA estaba bien etiquetado (v2.7), pero FFmpeg
+deja el bloque de etiquetas (átomo moov) AL FINAL del archivo, detrás
+de todo el audio, y los reproductores baratos solo escanean la
+cabecera: por eso mostraban "unknown". Ahora MusikALAN reordena el
+m4a como hace iTunes ("faststart"): las etiquetas quedan AL PRINCIPIO
+y el audio no se recodifica ni pierde calidad. El MP3 ya funcionaba
+(ID3v2 también vive al inicio del archivo) y sigue igual.
 
 Novedades v2.7: etiquetas verificadas en TODOS los formatos. La
 carátula ya no la incrusta el postprocesador de yt-dlp (su método
@@ -145,7 +154,9 @@ quieres tenerlos todos juntos.
 
 FORMATOS Y PARÁMETROS TÉCNICOS
 ------------------------------
-AAC   .m4a   AAC 96 / 128 kbps. Con título, artista, álbum y carátula.
+AAC   .m4a   AAC 96 / 128 kbps. Con título, artista, álbum y carátula
+             al inicio del archivo (faststart, como iTunes): los
+             reproductores básicos las ven siempre.
 MP3   .mp3   96 / 128 / 192 / 256 / 320 kbps (desplegable Calidad).
              Con título, artista, álbum y carátula incrustada.
 FLAC  .flac  sin pérdida. Con etiquetas y carátula.
@@ -178,7 +189,12 @@ reproductor sí muestra; desde la v2.7 cada formato lleva SU etiqueta
 estándar verificada (ID3 en MP3/WAV, átomos MP4 en AAC/M4A, Vorbis+Picture
 en FLAC, ASF en WMA, RIFF INFO en AVI), la carátula va garantizada en
 JPEG en todos los formatos de audio (escrita por MusikALAN, no por
-yt-dlp), y la URL de la canción queda en el comentario.
+yt-dlp), y la URL de la canción queda en el comentario. Y desde la
+v2.8, en el AAC/M4A esas etiquetas quedan al PRINCIPIO del archivo
+(átomo moov en posición faststart, como lo escribe iTunes): FFmpeg las
+deja al final, detrás del audio, y los reproductores baratos solo
+escanean la cabecera, por eso mostraban "unknown" en AAC aunque el
+MP3 se viera bien.
 
 Notas honestas:
 · FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
