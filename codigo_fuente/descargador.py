@@ -32,6 +32,16 @@ SIEMPRE se incrusta en JPEG: la miniatura de YouTube viene en WebP y
 muchos reproductores solo leen JPEG (igual que --convert-thumbnails
 jpg del comando antiguo, que es lo que si funcionaba).
 
+Desde la v2.7 TODOS los formatos llevan las etiquetas en su forma
+estandar y verificada: ID3v2.4 + UTF-16 en .mp3, atomos MP4 (©nam,
+©ART, ©alb, covr...) en .m4a como iTunes, ID3 dentro del RIFF en
+.wav, Vorbis + Picture en .flac, ASF (Title/Author/WM/*) en .wma y
+RIFF INFO (INAM/IART/IPRD) en .avi. La caratula se escribe SIEMPRE
+con mutagen, nunca via EmbedThumbnail de yt-dlp: sus metodos
+internos cambian entre versiones y fueron la fuente de portadas
+PNG/mal convertidas que hacian que los reproductores baratos
+descartaran tambien artista y album.
+
 Uso:  python descargador.py   (o doble clic en DescargadorMusica.bat)
 Si la URL pertenece a una lista de reproduccion, el programa pregunta
 si bajar solo la cancion pegada o la playlist completa (con una pausa
@@ -53,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.6'
+APP_V = '2.7'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -553,7 +563,8 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
     """Escribe con mutagen las etiquetas del archivo final.
 
     Garantiza que TODOS los reproductores muestren artista y album,
-    aunque FFmpegMetadata de yt-dlp no los haya escrito. Ademas:
+    aunque FFmpegMetadata de yt-dlp no los haya escrito. Cada formato
+    con SU forma estandar:
       · MP3: ID3v2.4 con textos UTF-16 (encoding=1) y APIC(mime
         'image/jpg', tipo 3, desc 'attached picture'), calcado del
         MP3 de referencia que el reproductor del usuario muestra
@@ -561,13 +572,18 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
         tag v2.3: fuera de especificacion, y los reproductores
         baratos descartaban la etiqueta ENTERA (ni artista, ni
         album, ni portada).
-      · la caratula siempre acaba en JPEG (yt-dlp incrusta las
-        miniaturas de YouTube como PNG/WebP y muchos reproductores
-        baratos solo leen JPEG; cuando el parser de la caratula falla,
-        dejan de mostrar tambien artista y album);
-      · si EmbedThumbnail no incrusto nada, se incrusta `caratula`;
-      · el comentario guarda la URL del video (como el script antiguo);
-      · WMA lleva caratula (WM/Picture) y URL (WM/AuthorURL) via mutagen.
+      · M4A: atomos MP4 estandar (©nam/©ART/aART/©alb/©day/©cmt) y
+        covr en JPEG, como iTunes.
+      · WAV: ID3 dentro del RIFF (mutagen.wave), igual que el MP3,
+        mas APIC con la caratula (nuevo en v2.7).
+      · FLAC: Vorbis comments + Picture en JPEG.
+      · WMA: ASF Title/Author/WM/AlbumTitle/WM/AuthorURL + WM/Picture.
+      · la caratula SIEMPRE acaba en JPEG y se escribe AQUI con
+        mutagen: desde v2.7 EmbedThumbnail ya no toca la caratula
+        (su metodo cambia entre versiones de yt-dlp y alguna
+        conversion suya dejaba PNG/WebP que los reproductores
+        baratos no leen);
+      · el comentario guarda la URL del video (como el script antiguo).
     `caratula` son los bytes de la miniatura descargada (opcional)."""
     try:
         p = Path(archivo)
@@ -599,11 +615,10 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
                 m['\xa9day'] = [fecha]
             if url:
                 m['\xa9cmt'] = [url]
-            # -- caratula: garantizamos JPEG SIEMPRE (tambien cuando
-            #    EmbedThumbnail ya incrusto algo); `caratula` es el plan B
-            #    si no quedo ninguna. yt-dlp/EmbedThumbnail usa el atomo
-            #    estandar 'covr' (sin el prefijo (c)); en mutagen moderno
-            #    escribir '\xa9covr' lanza TypeError.
+            # -- caratula: desde v2.7 la escribe SIEMPRE este pase con
+            #    mutagen (EmbedThumbnail ya no participa). Atomo
+            #    estandar 'covr' (sin el prefijo (c)); en mutagen
+            #    moderno escribir '\xa9covr' lanza TypeError.
             viejas = m.get('covr') or m.get('\xa9covr') or []
             if not viejas:
                 if caratula:
@@ -670,8 +685,8 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
             # referencia (ID3v2.4.0 escrito por Lavf60.3.100).
             tags.save(str(p), v2_version=4)
         elif ext == '.wav':
-            from mutagen.id3 import (COMM, TDRC, TIT2, TLEN, TPE1, TPE2,
-                                     TALB)
+            from mutagen.id3 import (APIC, COMM, TDRC, TIT2, TLEN, TPE1,
+                                     TPE2, TALB)
             from mutagen.wave import WAVE
             w = WAVE(str(p))
             if w.tags is None:
@@ -697,6 +712,20 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
             if url:
                 w.tags.setall('COMM', [COMM(encoding=1, lang='eng',
                                             desc='', text=[url])])
+            # v2.7: caratula en el ID3 del WAV (mismas constantes que
+            # el MP3 de referencia), para los reproductores que leen
+            # el chunk 'id3 ' dentro del RIFF.
+            datos = caratula
+            if not datos:
+                apics = w.tags.getall('APIC')
+                if apics:
+                    datos = apics[0].data
+            if datos and not _es_jpg(datos):
+                datos = _a_jpg(datos)
+            if datos:
+                w.tags.setall('APIC', [APIC(encoding=1, mime='image/jpg',
+                                            type=3, desc='attached picture',
+                                            data=datos)])
             w.save()
         elif ext == '.flac':
             from mutagen.flac import FLAC, Picture
@@ -764,11 +793,14 @@ def aplicar_tags(info, archivo, log=None, caratula=None):
 def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     """AAC (.m4a) / MP3 / FLAC / WAV vía postprocesadores de yt-dlp.
 
-    La carátula se convierte a JPG ANTES de incrustarla (mismo orden y
-    claves que genera el CLI con --convert-thumbnails jpg):
-    EmbedThumbnail solo convierte las miniaturas WebP de YouTube a PNG
-    ("PNG is preferred since JPEG is lossy") y los reproductores
-    baratos suelen leer solo JPEG."""
+    yt-dlp SOLO baja, convierte y escribe los metadatos de texto
+    (FFmpegMetadata). La carátula NO la incrusta EmbedThumbnail: desde
+    v2.7 la escribe aplicar_tags con mutagen (covr en m4a, APIC en
+    mp3/wav, Picture en flac), siempre en JPEG y con la estructura
+    exacta que leen los reproductores. Así el resultado no depende de
+    los métodos internos de EmbedThumbnail, que cambian entre
+    versiones de yt-dlp (antes convertía la portada a PNG, y su
+    método ffmpeg adjunta la imagen como stream de vídeo)."""
     def log(m, t='info'):
         cola.put(('log', m, t))
 
@@ -776,7 +808,7 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
     carpeta = destino          # v2.3: sin subcarpetas por formato
     carpeta.mkdir(parents=True, exist_ok=True)
     codec = fmt['ext']
-    con_portada = embeber and nombre_fmt in ('AAC', 'MP3', 'FLAC')
+    con_portada = embeber and nombre_fmt in ('AAC', 'MP3', 'FLAC', 'WAV')
     con_tags = embeber
     pps = []
     if con_portada:
@@ -786,9 +818,10 @@ def descargar_audio(url, nombre_fmt, calidad, destino, embeber, cola):
                 'preferredquality': calidad or '0'})
     if con_tags:
         pps.append({'key': 'FFmpegMetadata', 'add_metadata': True})
-    if con_portada:
-        pps.append({'key': 'EmbedThumbnail',
-                    'already_have_thumbnail': False})
+    # v2.7: SIN EmbedThumbnail. La miniatura (dejada en .jpg junto al
+    # archivo por writethumbnail + Convertor) la incrusta aplicar_tags
+    # con mutagen: estructura garantizada en todos los formatos y sin
+    # depender de los métodos internos de yt-dlp.
     o = opts_base(carpeta, cola)
     o['format'] = 'bestaudio/best'
     o['postprocessors'] = pps
@@ -860,6 +893,33 @@ def descargar_wma(url, calidad, destino, embeber, cola):
     return info, wma
 
 
+def meta_riff_info(info):
+    """v2.7: argumentos -metadata para los tags RIFF INFO del AVI.
+
+    FFmpeg los mapea a INAM (titulo), IART (artista), IPRD (album),
+    ICRD (fecha) e ICMT (comentario) dentro del chunk LIST/INFO del
+    RIFF, que es donde los reproductores buscan los datos de un AVI."""
+    titulo = str(info.get('track') or info.get('title') or '').strip()
+    artista = _artista_limpio(info)
+    album = _album_de(info)
+    fecha = str(info.get('release_year') or '')
+    if not fecha:
+        fecha = str(info.get('upload_date') or '')[:4]
+    url = str(info.get('webpage_url') or '').strip()
+    meta = []
+    if titulo:
+        meta += ['-metadata', 'title=' + titulo]
+    if artista:
+        meta += ['-metadata', 'artist=' + artista]
+    if album:
+        meta += ['-metadata', 'album=' + album]
+    if fecha:
+        meta += ['-metadata', 'date=' + fecha]
+    if url:
+        meta += ['-metadata', 'comment=' + url]
+    return meta
+
+
 # Parámetros oficiales del repo fdd4s/portable_mp3_player_video_converter_tools
 # (video2shenju18.sh): MJPEG 16 fps + PCM 22050 Hz, rotados para la pantalla
 # vertical de 128x160 del reproductor sheiju de 1.8 pulgadas.
@@ -893,9 +953,13 @@ def descargar_avi(url, destino, cola):
     if not origen:
         raise RuntimeError('No se encontró el video descargado.')
     avi = carpeta / (limpiar_nombre(info.get('title') or 'video') + '.avi')
+    # v2.7: etiquetas RIFF INFO dentro del AVI (ver meta_riff_info)
+    # para que el video tambien muestre titulo y artista donde el
+    # reproductor sepa leerlas.
+    meta = meta_riff_info(info)
     base = [str(FFMPEG), '-y', '-i', str(origen), '-r', '16',
             '-acodec', 'pcm_s16le', '-ac', '2', '-ar', '22050',
-            '-pix_fmt', 'yuvj420p', '-c:v', 'mjpeg', '-q:v', '2']
+            '-pix_fmt', 'yuvj420p', '-c:v', 'mjpeg', '-q:v', '2'] + meta
     ok = convertir_ffmpeg(base + ['-vf', VF_SHEIJU, str(avi)],
                           'Convirtiendo a AVI 128x160 (sheiju 1.8")', cola)
     if not ok:
@@ -927,7 +991,8 @@ def estimar_bytes(duracion_s, formato, calidad, embeber):
             kbps = KBPS_ESTIMADOS.get(formato, 128)
     else:
         kbps = KBPS_ESTIMADOS.get(formato, 128)
-    extra = 120_000 if (embeber and formato in ('AAC', 'MP3', 'FLAC')) else 0
+    extra = 120_000 if (embeber and formato in ('AAC', 'MP3', 'FLAC',
+                                                'WAV')) else 0
     return duracion_s * kbps * 1000 / 8 + extra
 
 

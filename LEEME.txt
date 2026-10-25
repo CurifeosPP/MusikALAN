@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.6  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.7  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,18 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.7: etiquetas verificadas en TODOS los formatos. La
+carátula ya no la incrusta el postprocesador de yt-dlp (su método
+interno cambia entre versiones y fue el origen de portadas mal
+convertidas que hacían que el reproductor ocultara también artista y
+álbum): ahora la escribe siempre MusikALAN con mutagen, en JPEG y
+con la estructura exacta que lee tu reproductor — átomo covr en el
+M4A (igual que iTunes), APIC en el MP3, Picture en FLAC, WM/Picture
+en WMA y APIC nuevo también en WAV. Y el AVI por fin lleva etiquetas
+RIFF INFO (título, artista, álbum, fecha y URL en el comentario).
+El artista y el álbum se garantizan siempre (si la canción no trae
+álbum, se usa el nombre del canal o de la lista).
 
 Novedades v2.6: las etiquetas del MP3 ahora se escriben en el MISMO
 formato binario que usan los MP3 que sí se ven bien en el reproductor
@@ -162,9 +174,11 @@ playlist si descargas una lista; si es una canción suelta, el propio
 artista) y el año. Así los reproductores de música siempre muestran
 artista y álbum. Desde la v2.6, además, el MP3 usa el mismo formato
 de etiqueta binaria (ID3v2.4 + UTF-16) que los MP3 comerciales que el
-reproductor sí muestra, la carátula va garantizada en JPEG en
-AAC/MP3/FLAC (y en WMA con WM/Picture), y la URL de la canción queda
-en el comentario.
+reproductor sí muestra; desde la v2.7 cada formato lleva SU etiqueta
+estándar verificada (ID3 en MP3/WAV, átomos MP4 en AAC/M4A, Vorbis+Picture
+en FLAC, ASF en WMA, RIFF INFO en AVI), la carátula va garantizada en
+JPEG en todos los formatos de audio (escrita por MusikALAN, no por
+yt-dlp), y la URL de la canción queda en el comentario.
 
 Notas honestas:
 · FLAC/WAV desde YouTube no son "calidad real sin pérdida": la
