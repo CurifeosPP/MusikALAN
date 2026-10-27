@@ -55,6 +55,11 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **Registro limpio + calidad real + botón Pegar (v2.12)**: los pasos
+  internos se ven solo en la barra de progreso; el mensaje final indica si
+  se consiguió la calidad seleccionada (p. ej. «AAC 128k») o si YouTube solo
+  ofrecía una fuente algo más baja (~64k de 128k), y un botón «Pegar» junto
+  a la URL pega el enlace copiado con un clic
 - **La app se renueva con el instalador (v2.11)**: el programa embebido se
   restaura del .bat en cada arranque, así que la versión de la ventana
   coincide siempre con la del instalador (en la v2.10, quien ya tenía una

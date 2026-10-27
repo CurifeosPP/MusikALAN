@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.11'
+APP_V = '2.12'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -321,14 +321,25 @@ class Registro:
 
 REGISTRO = Registro()
 
+# v2.12: bitrate (kbps) del audio que YouTube entrego en la ultima
+# descarga (lo rellena el hook de progreso al terminar de bajar). Sirve
+# para decir en el mensaje final si se consiguio la calidad pedida o si
+# YouTube solo tenia una fuente algo mas baja.
+_FUENTE = {'abr': None}
+
 NOMBRES_PP = {
     'FFmpegExtractAudio': 'Convirtiendo el audio con FFmpeg',
+    'ExtractAudio': 'Convirtiendo el audio',
     'FFmpegThumbnailsConvertor': 'Convirtiendo la carátula a JPG',
+    'ThumbnailsConvertor': 'Convirtiendo la carátula',
     'FFmpegMetadata': 'Escribiendo etiquetas (título/artista)',
+    'Metadata': 'Escribiendo etiquetas',
     'EmbedThumbnail': 'Incrustando la carátula',
     'MoveFiles': 'Organizando archivos',
     'FFmpegMerger': 'Uniendo pistas de video y audio',
+    'Merger': 'Uniendo pistas',
     'FFmpegVideoConvertor': 'Convirtiendo el video',
+    'VideoConvertor': 'Convirtiendo el video',
 }
 
 # ---------------------------------------------------------------- formatos
@@ -382,6 +393,14 @@ def hooks_gui(cola):
                 cola.put(('prog', None, f'{fmt_tam(done)} · {v}'))
         elif d['status'] == 'finished':
             estado['pp_ult'] = None
+            # v2.12: recordar la calidad REAL que YouTube entrego (el
+            # formato elegido puede ser mas bajo que el pedido). Solo se
+            # acepta si trae bitrate: la miniatura no lo trae y no debe
+            # machacar el valor.
+            inf = d.get('info_dict') or {}
+            abr = inf.get('abr') or inf.get('tbr')
+            if isinstance(abr, (int, float)) and abr > 0:
+                _FUENTE['abr'] = float(abr)
             cola.put(('log', 'Descarga recibida. Procesando...', 'gris'))
             cola.put(('prog', 0, 'Procesando...'))
 
@@ -393,10 +412,35 @@ def hooks_gui(cola):
                 return  # yt-dlp a veces anuncia el mismo paso dos veces
             estado['pp_ult'] = nom
             texto = NOMBRES_PP.get(nom, nom) + '...'
-            cola.put(('log', '→ ' + texto, 'gris'))
+            # v2.12: los pasos internos solo se ven en la barra de
+            # progreso; el registro se queda con lo importante
             cola.put(('prog', None, texto))
 
     return progreso, postproceso
+
+
+def texto_calidad(clave, calidad_arg):
+    """Sufijo del mensaje final: ¿se consiguio la calidad pedida?
+    Compara el bitrate del formato que YouTube entrego (_FUENTE, que
+    rellena el hook de progreso) con la calidad seleccionada. Solo
+    aplica a los formatos con bitrate: FLAC/WAV no tienen 'calidad'
+    que comparar y el AVI es video. Si no se pudo saber la fuente,
+    no se anade nada (mejor callar que inventar)."""
+    if clave not in ('AAC', 'MP3', 'WMA'):
+        return ''
+    try:
+        pedida = int(re.sub(r'[^0-9]', '', str(calidad_arg)))
+    except ValueError:
+        return ''
+    if pedida <= 0:
+        return ''
+    fuente = _FUENTE.get('abr')
+    if not fuente:
+        return ''          # no se pudo saber: mejor callar que inventar
+    if fuente < pedida * 0.9:
+        return ('  ·  calidad algo más baja: YouTube solo ofrecía ~'
+                f'{int(round(fuente))}k de {pedida}k')
+    return f'  ·  {clave} {pedida}k (calidad seleccionada)'
 
 
 # ------------------------------------------- anti-bloqueo de YouTube (v2.9)
@@ -1238,8 +1282,12 @@ if TK_OK:
             self.ent_url.grid(row=0, column=0, sticky='ew',
                               padx=8, pady=8, ipady=5)
             self._poner_placeholder()
+            # v2.12: boton Pegar (pega el enlace del portapapeles) + X
+            self.btn_pegar = self._boton(gu, 'Pegar', self._pegar_url)
+            self.btn_pegar.grid(row=0, column=1, sticky='e', padx=(0, 4),
+                                ipady=3)
             self.btn_x = self._boton(gu, 'X', self._limpiar_url, width=3)
-            self.btn_x.grid(row=0, column=1, sticky='e', padx=(0, 8), ipady=3)
+            self.btn_x.grid(row=0, column=2, sticky='e', padx=(0, 8), ipady=3)
 
             # --- grupo: Formato y calidad ---------------------------------
             gf = tk.LabelFrame(marco, text='Formato y calidad', font=FUENTE_UI,
@@ -1381,6 +1429,27 @@ if TK_OK:
 
         def _limpiar_url(self):
             self.ent_url.delete(0, 'end')
+            self.ent_url.focus_set()
+
+        def _pegar_url(self):
+            """v2.12: pega en el campo la URL copiada al portapapeles.
+            Si el portapapeles trae texto con un enlace dentro (p. ej.
+            'mira esto https://...'), se queda solo con el enlace."""
+            try:
+                texto = (self.clipboard_get() or '').strip()
+            except Exception:
+                texto = ''
+            if not texto:
+                self._log('El portapapeles está vacío o no tiene texto.',
+                          'aviso')
+                return
+            m = re.search(r'https?://[^\s"\']+', texto, re.I)
+            if m:
+                texto = m.group(0)
+            self.ent_url.delete(0, 'end')
+            self.ent_url.insert(0, texto)
+            self._en_placeholder = False
+            self._refrescar_placeholder()
             self.ent_url.focus_set()
 
         def _reset_url(self):
@@ -1618,7 +1687,7 @@ if TK_OK:
             estado = 'normal' if on else 'disabled'
             for b in (self.btn_descargar, self.btn_comprobar,
                       self.btn_estimar, self.btn_cambiar, self.btn_abrir,
-                      self.btn_x):
+                      self.btn_pegar, self.btn_x):
                 b.configure(state=estado, cursor='hand2' if on else 'arrow')
 
         def _iniciar(self, objetivo, cfg, texto):
@@ -1830,7 +1899,8 @@ if TK_OK:
                         tam = fmt_tam(Path(archivo).stat().st_size)
                     except OSError:
                         tam = '?'
-                    log(f'   ✔ {Path(archivo).name}  ({tam})', 'ok')
+                    log(f'   ✔ {Path(archivo).name}  ({tam})'
+                        f'{texto_calidad(clave, calidad_arg)}', 'ok')
                     okas += 1
                 else:
                     fallos.append(tit)
@@ -1889,7 +1959,8 @@ if TK_OK:
                         tam = fmt_tam(archivo.stat().st_size)
                     except OSError:
                         tam = '?'
-                    log(f'✔ ¡Listo!  {archivo.name}  ({tam})', 'ok')
+                    log(f'✔ ¡Listo!  {archivo.name}  ({tam})'
+                        f'{texto_calidad(clave, calidad_arg)}', 'ok')
                     log(f'Carpeta: {archivo.parent}', 'gris')
                     cola.put(('fin', 'descarga', True, ''))
                 else:

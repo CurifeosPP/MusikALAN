@@ -28,11 +28,11 @@ rem     --sin-buscar   se salta la comprobacion de actualizaciones
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title MusikALAN v2.11
+title MusikALAN v2.12
 rem  Marca de version: la busca este mismo archivo con findstr para
 rem  compararse con la ultima release publicada en GitHub.
 rem  NO cambiar el formato de la linea siguiente.
-rem VERSION-BUSCABLE: 2.11
+rem VERSION-BUSCABLE: 2.12
 cd /d "%~dp0"
 set "SELF=%~f0"
 set "V_LOCAL=0"
@@ -94,7 +94,7 @@ echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_
 echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%MusikALAN v2.11%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.12%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
@@ -243,7 +243,7 @@ echo   La musica se guarda en tu carpeta de Musica.
 echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title MusikALAN v2.11 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+title MusikALAN v2.12 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if defined GUIEXE goto lanzar_gui
 echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
 echo    deja esta consola abierta mientras uses el programa.
