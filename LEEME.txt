@@ -13,6 +13,17 @@ interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
 
+Novedades v2.10: el instalador se actualiza solo. Al arrancar, el .bat
+consulta en GitHub si hay una versión más nueva de MusikALAN; si la
+hay, descarga el instalador actualizado, comprueba que sea auténtico
+(tamaño, contenido y que su versión sea mayor que la tuya), borra SOLO
+el programa viejo (el script de la app) conservando Python, FFmpeg,
+yt-dlp/mutagen y tus ajustes, reemplaza el .bat y se reinicia solo:
+a los pocos segundos vuelve a abrirse la ventana, ya actualizada. No
+hace falta volver a descargar nada a mano nunca más. Si no hay
+internet o algo falla, simplemente continúa con la versión actual.
+Parámetro opcional --sin-buscar para saltarse la comprobación.
+
 Novedades v2.9: anti-bloqueo de YouTube. Cuando YouTube desconfía de
 una red (wifi compartido, datos móviles, VPN o muchas descargas
 seguidas) responde "Sign in to confirm you're not a bot" o error 429

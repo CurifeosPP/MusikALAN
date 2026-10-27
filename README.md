@@ -55,6 +55,12 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **Auto-actualización (v2.10)**: al arrancar, el .bat consulta la última
+  release en GitHub; si hay una versión mayor, se descarga, se valida
+  (tamaño, payload y versión), **borra solo el programa viejo conservando
+  Python/FFmpeg/yt-dlp/mutagen y tus ajustes**, se reemplaza a sí mismo y
+  se reinicia solo. Tolerante a fallos: sin internet sigue funcionando
+  normal. Parámetro `--sin-buscar` para saltar la comprobación
 - Comprobación de versión de yt-dlp contra PyPI al arrancar y actualización
   integrada (Ctrl+U)
 

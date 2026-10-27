@@ -3,24 +3,37 @@ rem ================================================================
 rem  MUSIKALAN - instalador y lanzador todo-en-uno (antes Descargador de Musica)
 rem  ----------------------------------------------------------------
 rem  Este unico archivo .bat:
-rem    [1] Restaura la aplicacion (script Python embebido en base64)
-rem    [2] Comprueba Python 3.9+ con Tkinter; si falta, descarga un
+rem    [1] Comprueba si hay una version mas reciente en GitHub; si la hay,
+rem        se descarga y se reemplaza a si mismo (conservando Python,
+rem        FFmpeg, yt-dlp/mutagen y tus ajustes) y se reinicia solo
+rem    [2] Restaura la aplicacion (script Python embebido en base64)
+rem    [3] Comprueba Python 3.9+ con Tkinter; si falta, descarga un
 rem        Python portatil COMPLETO dentro de la carpeta de datos
 rem        %APPDATA%\MusikALAN\runtime (sin permisos de administrador;
 rem        incluye la interfaz grafica)
-rem    [3] Instala yt-dlp y mutagen con pip si no estan
-rem    [4] Comprueba FFmpeg ; si falta, lo descarga de los espejos
+rem    [4] Instala yt-dlp y mutagen con pip si no estan
+rem    [5] Comprueba FFmpeg ; si falta, lo descarga de los espejos
 rem        rapidos de GitHub (GyanD / BtbN) y de gyan.dev de reserva
-rem    [5] Abre la ventana de descargas (YouTube Downloader)
+rem    [6] Abre la ventana de descargas (YouTube Downloader)
 rem  Requisitos: Windows 10 1803 o superior. Internet solo la primera vez.
 rem  Desde la v2.4 todo se instala en %APPDATA%\MusikALAN aunque el .bat
 rem  este en Descargas; una instalacion vieja junto al .bat se mueve sola.
-rem  Parametro opcional:  --reinstalar   (vuelve a extraer descargador.py)
+rem  Desde la v2.10 el .bat se auto-actualiza solo al arrancar.
+rem  Parametros opcionales:
+rem     --reinstalar   vuelve a extraer descargador.py
+rem     --sin-buscar   se salta la comprobacion de actualizaciones
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title MusikALAN v2.9
+title MusikALAN v2.10
+rem  Marca de version: la busca este mismo archivo con findstr para
+rem  compararse con la ultima release publicada en GitHub.
+rem  NO cambiar el formato de la linea siguiente.
+rem VERSION-BUSCABLE: 2.10
 cd /d "%~dp0"
+set "SELF=%~f0"
+set "V_LOCAL=0"
+for /f "tokens=3" %%V in ('findstr /b /c:"rem VERSION-BUSCABLE:" "%~f0"') do set "V_LOCAL=%%V"
 
 rem --- carpeta de datos del programa: %APPDATA%\MusikALAN ---
 rem Desde la v2.4 los componentes (script, Python, FFmpeg) se guardan en
@@ -78,7 +91,7 @@ echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_
 echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%MusikALAN v2.9%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.10%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
@@ -87,6 +100,18 @@ echo    Datos   : %APPDIR%
 echo    Musica  : las canciones se guardan en tu carpeta de Musica
 echo.
 
+rem --- [1/6] comprobar si hay una version mas reciente en GitHub ---
+rem  Si la hay, este archivo se reemplaza a si mismo conservando todo
+rem  lo pesado (Python, FFmpeg, yt-dlp/mutagen) y se reinicia solo.
+rem  Cualquier fallo aqui se ignora y se sigue con la version actual.
+if /i "%~1"=="--sin-buscar" goto seguir_instalacion
+echo  %C_INFO%[1/6]%C_FIN% %C_TIT%Buscando actualizaciones%C_FIN%...
+call :comprobar_actualizacion
+if "%UPD%"=="2" echo    %C_GRI%(ahora mismo no se pudo comprobar; se continua igual)%C_FIN%
+if "%UPD%"=="0" echo    %C_OK%OK%C_FIN% tienes la version mas reciente (v%V_LOCAL%).
+if "%UPD%"=="1" goto hay_actualizacion
+
+:seguir_instalacion
 rem --- migracion: si hay una instalacion antigua junto al .bat, se
 rem     mueve a la carpeta de datos para no descargarla otra vez ---
 if not exist "%SCRIPT%" if exist "%~dp0descargador.py" move /y "%~dp0descargador.py" "%SCRIPT%" >nul 2>nul
@@ -95,7 +120,7 @@ if not exist "%RUNTIME%\python\python.exe" if exist "%~dp0runtime" call :migrar_
 if not exist "%FFDIR%\bin\ffmpeg.exe" if exist "%~dp0ffmpeg" call :migrar_carpeta "%~dp0ffmpeg" "%FFDIR%" "%FFDIR%\bin\ffmpeg.exe"
 if exist "%~dp0_instalacion_tmp" rmdir /s /q "%~dp0_instalacion_tmp" 2>nul
 
-echo  %C_INFO%[1/5]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
+echo  %C_INFO%[2/6]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
 if "%~1"=="--reinstalar" if exist "%SCRIPT%" del /q "%SCRIPT%"
 if exist "%SCRIPT%" goto script_listo
 for /f "tokens=1 delims=:" %%a in ('findstr /b /c:":::" "%~f0"') do >>"%TMPDIR%\payload.b64" echo(%%a
@@ -112,7 +137,7 @@ echo    (se pudo cortar al copiarlo o enviarlo).
 goto fin_error
 
 :script_listo
-echo  %C_INFO%[2/5]%C_FIN% %C_TIT%Buscando Python%C_FIN% con soporte de interfaz grafica...
+echo  %C_INFO%[3/6]%C_FIN% %C_TIT%Buscando Python%C_FIN% con soporte de interfaz grafica...
 if exist "%RUNTIME%\python\python.exe" goto py_portatil
 py -3 -c "import sys,tkinter;sys.exit(not sys.version_info>=(3,9))" >nul 2>nul
 if not errorlevel 1 goto py_sys_py
@@ -161,7 +186,7 @@ echo    %C_OK%OK%C_FIN% Python del sistema encontrado.
 goto py_listo
 
 :py_listo
-echo  %C_INFO%[3/5]%C_FIN% %C_TIT%Verificando yt-dlp y mutagen%C_FIN%...
+echo  %C_INFO%[4/6]%C_FIN% %C_TIT%Verificando yt-dlp y mutagen%C_FIN%...
 "%PYEXE%" %PYARGS% -c "import pip" >nul 2>nul
 if errorlevel 1 "%PYEXE%" %PYARGS% -m ensurepip --upgrade >nul 2>nul
 "%PYEXE%" %PYARGS% -c "import yt_dlp, mutagen" >nul 2>nul
@@ -178,7 +203,7 @@ goto fin_error
 :ytdlp_ok
 echo    %C_OK%OK%C_FIN% yt-dlp y mutagen listos.
 
-echo  %C_INFO%[4/5]%C_FIN% %C_TIT%Buscando FFmpeg%C_FIN%...
+echo  %C_INFO%[5/6]%C_FIN% %C_TIT%Buscando FFmpeg%C_FIN%...
 if exist "%FFDIR%\bin\ffmpeg.exe" goto ff_local
 ffmpeg -version >nul 2>nul
 if not errorlevel 1 goto ff_sistema
@@ -194,7 +219,7 @@ goto ff_listo
 echo    %C_OK%OK%C_FIN% FFmpeg del sistema encontrado.
 :ff_listo
 
-echo  %C_INFO%[5/5]%C_FIN% %C_TIT%Todo listo%C_FIN% - abriendo la aplicacion...
+echo  %C_INFO%[6/6]%C_FIN% %C_TIT%Todo listo%C_FIN% - abriendo la aplicacion...
 rmdir /s /q "%TMPDIR%" >nul 2>nul
 set "TEND=%time: =0%"
 set /a "ELA_I=((1%TINI:~0,2%-100)*360000)+((1%TINI:~3,2%-100)*6000)+((1%TINI:~6,2%-100)*100)+(1%TINI:~9,2%-100)" 2>nul
@@ -210,7 +235,7 @@ echo   La musica se guarda en tu carpeta de Musica.
 echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title MusikALAN v2.9 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+title MusikALAN v2.10 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if defined GUIEXE goto lanzar_gui
 echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
 echo    deja esta consola abierta mientras uses el programa.
@@ -379,4 +404,104 @@ if not exist "%~3" exit /b 0
 :migrar_fin
 rmdir /s /q "%~1" >nul 2>nul
 echo    %C_OK%OK%C_FIN% "%~nx1" ya esta en la carpeta de datos.
+exit /b 0
+
+:comprobar_actualizacion
+rem  Consulta la ultima release publicada en GitHub (sin autenticar).
+rem  Deja en UPD:   0 = estas al dia | 1 = hay version nueva (en V_NUEVA)
+rem                 2 = no se pudo comprobar (sin internet, sin PowerShell...)
+set "UPD=2"
+set "V_NUEVA="
+if not defined V_LOCAL exit /b 2
+if not exist "%TMPDIR%" mkdir "%TMPDIR%" 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; try{ $r=Invoke-RestMethod -Uri 'https://api.github.com/repos/CurifeosPP/MusikALAN/releases/latest' -TimeoutSec 8; $t=([string]$r.tag_name).TrimStart('v'); if($t -match '^[0-9]+(\.[0-9]+)?$'){ Set-Content -LiteralPath '%TMPDIR%\version_nueva.txt' -Value $t -Encoding Ascii; exit 0 } } catch { }; exit 2" >nul 2>nul
+if errorlevel 1 exit /b 2
+if exist "%TMPDIR%\version_nueva.txt" for /f "usebackq delims=" %%V in ("%TMPDIR%\version_nueva.txt") do set "V_NUEVA=%%V"
+del /q "%TMPDIR%\version_nueva.txt" >nul 2>nul
+if not defined V_NUEVA exit /b 2
+call :comparar_versiones "%V_NUEVA%" "%V_LOCAL%"
+set "UPD=%COMPARACION%"
+exit /b 0
+
+:hay_actualizacion
+rem  Hay una version mas nueva publicada: descargarla, validarla y
+rem  reemplazar este .bat conservando Python/FFmpeg/yt-dlp/ajustes.
+echo    %C_INFO%Nueva version v%V_NUEVA%%C_FIN% disponible (tienes la v%V_LOCAL%).
+echo    Descargando el instalador actualizado, un momento...
+call :Descargar "https://github.com/CurifeosPP/MusikALAN/releases/latest/download/DescargadorMusica.bat" "%TMPDIR%\MusikALAN_nueva.bat"
+if errorlevel 1 goto upd_err_desc
+set "UPD_TAM="
+for %%S in ("%TMPDIR%\MusikALAN_nueva.bat") do set "UPD_TAM=%%~zS"
+if not defined UPD_TAM goto upd_err_validar
+if %UPD_TAM% LSS 50000 goto upd_err_validar
+findstr /b /c:":::" "%TMPDIR%\MusikALAN_nueva.bat" >nul 2>nul
+if errorlevel 1 goto upd_err_validar
+set "V_DESC="
+for /f "tokens=3" %%V in ('findstr /b /c:"rem VERSION-BUSCABLE:" "%TMPDIR%\MusikALAN_nueva.bat"') do set "V_DESC=%%V"
+if not defined V_DESC goto upd_err_validar
+echo %V_DESC%| findstr /r "^[0-9][0-9.]*$" >nul 2>nul
+if errorlevel 1 goto upd_err_validar
+call :comparar_versiones "%V_DESC%" "%V_LOCAL%"
+if "%COMPARACION%"=="0" goto upd_sin_cambio
+rem  --- escribir el lanzador que hace el reemplazo al salir este .bat ---
+rem  Borra el programa viejo (script) pero conserva runtime, ffmpeg,
+rem  los paquetes pip y ajustes.json; el nuevo .bat, al arrancar, salta
+rem  directo a abrir la ventana porque las dependencias ya estan.
+> "%TMPDIR%\actualizar.cmd" (
+    echo @echo off
+    echo title MusikALAN - instalando v%V_DESC%
+    echo ping -n 4 127.0.0.1 ^>nul
+    echo del /q "%SCRIPT%" 2^>nul
+    echo move /y "%TMPDIR%\MusikALAN_nueva.bat" "%SELF%" ^>nul
+    echo if errorlevel 1 goto fallo_upd
+    echo start "" "%SELF%"
+    echo del /q "%%~f0" ^>nul 2^>nul
+    echo exit /b 0
+    echo :fallo_upd
+    echo echo.
+    echo echo  No se pudo reemplazar el archivo DescargadorMusica.bat
+    echo echo  ^(algo lo tiene bloqueado^). El nuevo quedo en:
+    echo echo    "%TMPDIR%\MusikALAN_nueva.bat"
+    echo echo  Muevelo a mano encima del viejo y ejecutalo.
+    echo pause
+    echo exit /b 1
+)
+echo    %C_OK%OK%C_FIN% todo listo. El instalador se reinicia solo en unos segundos...
+start "" cmd /c "%TMPDIR%\actualizar.cmd"
+endlocal
+exit /b 0
+
+:upd_sin_cambio
+del /q "%TMPDIR%\MusikALAN_nueva.bat" >nul 2>nul
+goto seguir_instalacion
+
+:upd_err_desc
+del /q "%TMPDIR%\MusikALAN_nueva.bat" >nul 2>nul
+echo    %C_GRI%(no se pudo descargar la actualizacion; se continua con la v%V_LOCAL%)%C_FIN%
+goto seguir_instalacion
+
+:upd_err_validar
+del /q "%TMPDIR%\MusikALAN_nueva.bat" >nul 2>nul
+echo    %C_GRI%(la descarga no paso la validacion; se continua con la v%V_LOCAL%)%C_FIN%
+goto seguir_instalacion
+
+:comparar_versiones
+rem  Uso: call :comparar_versiones "candidata" "actual"
+rem  Deja COMPARACION=1 si candidata es mas nueva que actual; 0 si no.
+set "COMPARACION=0"
+set "CV_A1=" & set "CV_A2=" & set "CV_A3=" & set "CV_B1=" & set "CV_B2=" & set "CV_B3="
+for /f "tokens=1-3 delims=." %%A in ("%~1") do (set "CV_A1=%%A" & set "CV_A2=%%B" & set "CV_A3=%%C")
+for /f "tokens=1-3 delims=." %%A in ("%~2") do (set "CV_B1=%%A" & set "CV_B2=%%B" & set "CV_B3=%%C")
+if not defined CV_A1 goto cmp_fin
+if not defined CV_B1 goto cmp_fin
+if not defined CV_A2 set "CV_A2=0"
+if not defined CV_B2 set "CV_B2=0"
+if not defined CV_A3 set "CV_A3=0"
+if not defined CV_B3 set "CV_B3=0"
+if %CV_A1% GTR %CV_B1% (set "COMPARACION=1" & goto cmp_fin)
+if %CV_A1% LSS %CV_B1% goto cmp_fin
+if %CV_A2% GTR %CV_B2% (set "COMPARACION=1" & goto cmp_fin)
+if %CV_A2% LSS %CV_B2% goto cmp_fin
+if %CV_A3% GTR %CV_B3% set "COMPARACION=1"
+:cmp_fin
 exit /b 0
