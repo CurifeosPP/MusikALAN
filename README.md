@@ -55,6 +55,11 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **Reintento de calidad (v2.14)**: si la canción quedó con una fuente
+  claramente más baja que la seleccionada (~64k de 128k), la app pregunta
+  «¿Lo intento de nuevo?»: reintenta por otras vías a una carpeta temporal
+  y se queda con la mejor de las dos descargas (si falla, no se pierde la
+  primera); «No» conserva la descarga tal cual
 - **Sin avisos que asusten (v2.13)**: los tres avisos técnicos informativos
   de YouTube (SABR, formatos saltados, PO Token) que salían en amarillo en
   casi todas las descargas —pareciendo un error cuando todo fue bien— ya no

@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.13'
+APP_V = '2.14'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -439,21 +439,148 @@ def texto_calidad(clave, calidad_arg):
     aplica a los formatos con bitrate: FLAC/WAV no tienen 'calidad'
     que comparar y el AVI es video. Si no se pudo saber la fuente,
     no se anade nada (mejor callar que inventar)."""
+    estado, fuente, pedida = _veredicto_calidad(clave, calidad_arg)
+    if estado == 'baja':
+        return ('  ·  calidad algo más baja: YouTube solo ofrecía ~'
+                f'{int(round(fuente))}k de {pedida}k')
+    if estado == 'ok':
+        return f'  ·  {clave} {pedida}k (calidad seleccionada)'
+    return ''
+
+
+def _veredicto_calidad(clave, calidad_arg):
+    """v2.14: separa el juicio del texto. Devuelve (estado, fuente,
+    pedida) con estado en:
+      'ok'   -> la fuente entregada alcanza (o casi) la calidad pedida
+      'baja' -> YouTube solo ofrecio una fuente claramente mas baja
+      ''     -> no se puede juzgar (formato sin bitrate o falta el dato)"""
     if clave not in ('AAC', 'MP3', 'WMA'):
-        return ''
+        return '', None, 0
     try:
         pedida = int(re.sub(r'[^0-9]', '', str(calidad_arg)))
     except ValueError:
-        return ''
+        return '', None, 0
     if pedida <= 0:
-        return ''
+        return '', None, 0
     fuente = _FUENTE.get('abr')
     if not fuente:
-        return ''          # no se pudo saber: mejor callar que inventar
+        return '', None, pedida
     if fuente < pedida * 0.9:
-        return ('  ·  calidad algo más baja: YouTube solo ofrecía ~'
-                f'{int(round(fuente))}k de {pedida}k')
-    return f'  ·  {clave} {pedida}k (calidad seleccionada)'
+        return 'baja', float(fuente), pedida
+    return 'ok', float(fuente), pedida
+
+
+def _reemplazar_archivo(viejo, nuevo, final):
+    """v2.14: sustituye la descarga vieja por la del reintento. Nunca
+    levanta: si algo falla se conserva la vieja (no se pierde nada).
+    Devuelve True si el reemplazo salio (usar 'final')."""
+    try:
+        if viejo.exists():
+            viejo.unlink()
+        shutil.move(str(nuevo), str(final))
+        return True
+    except OSError:
+        try:
+            if nuevo.exists():
+                nuevo.unlink()
+        except OSError:
+            pass
+        return False
+
+
+def reintento_calidad(self, url, clave, calidad_arg, embeber, destino,
+                      archivo, cola):
+    """v2.14: si la cancion quedo con una calidad mas baja que la
+    seleccionada, pregunta al usuario que hacer:
+      - Reintentar: baja otra vez por otras vias (combo android_vr/
+        android/ios, que a veces tiene mejores fuentes) a una carpeta
+        temporal y se queda con la MEJOR de las dos descargas. Si el
+        reintento falla, la primera no se toca.
+      - Conservar: deja la descarga tal cual.
+    Devuelve la ruta final (la misma o la mejorada)."""
+    def log(m, t='info'):
+        cola.put(('log', m, t))
+
+    estado, fuente1, pedida = _veredicto_calidad(clave, calidad_arg)
+    if estado != 'baja' or not archivo:
+        return archivo
+    resp = queue.Queue()
+    cola.put(('preguntar', 'MusikALAN — calidad más baja',
+              f'«{archivo.stem[:60]}» se descargó con una fuente de '
+              f'~{int(round(fuente1))}k en vez de los {pedida}k '
+              'seleccionados.\n\n'
+              '¿Lo intento de nuevo por si ahora YouTube ofrece la '
+              'calidad seleccionada?\n\n'
+              '  SÍ  →  reintentar y quedarse con la mejor\n'
+              '  NO  →  conservar esta descarga', resp))
+    try:
+        quiere = bool(resp.get(timeout=600))
+    except queue.Empty:
+        quiere = False
+    if not quiere:
+        log('Se conserva la descarga con la calidad conseguida.', 'gris')
+        return archivo
+    log('↻ Reintentando por otras vías para buscar la calidad '
+        f'seleccionada ({pedida}k)...', 'info')
+    tmp = destino / '.musikalan_reintento'
+    try:
+        tmp.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        log('No se pudo crear la carpeta temporal del reintento: '
+            + str(e), 'aviso')
+        return archivo
+    _ANTI_BOT['combo'] = 1    # android_vr/android/ios: inventario distinto
+    try:
+        try:
+            archivo2 = self._descargar_una(url, clave, calidad_arg,
+                                           embeber, tmp, cola)
+        except Exception as e:
+            if _es_bloqueo_bot(str(e)):
+                log('El reintento chocó con la verificación anti-bot de '
+                    'YouTube. Se conserva la descarga anterior.', 'aviso')
+                log('Consejo: en «Si YouTube bloquea:» elige Usar '
+                    'cookies de tu navegador y vuelve a descargar: con '
+                    'tu sesión abierta suele dar la calidad buena.',
+                    'gris')
+            else:
+                log('El reintento falló: '
+                    + str(self._msg_error(e))[:120], 'aviso')
+                log('Se conserva la descarga anterior.', 'gris')
+            return archivo
+        if not (archivo2 and Path(archivo2).exists()):
+            log('El reintento no produjo archivo; se conserva la '
+                'descarga anterior.', 'aviso')
+            return archivo
+        archivo2 = Path(archivo2)
+        fuente2 = _FUENTE.get('abr') or 0.0
+        final = destino / archivo2.name
+        if fuente2 >= pedida * 0.9:
+            if _reemplazar_archivo(archivo, archivo2, final):
+                log(f'✔ ¡Ahora sí!  {final.name}'
+                    f'{texto_calidad(clave, calidad_arg)}', 'ok')
+            else:
+                log('No se pudo reemplazar el archivo; se conserva la '
+                    'descarga anterior.', 'aviso')
+            return final if final.exists() else archivo
+        if fuente2 > fuente1 * 1.05:
+            if _reemplazar_archivo(archivo, archivo2, final):
+                log(f'✔ Mejoró a ~{int(round(fuente2))}k, pero YouTube '
+                    f'no tiene {pedida}k ahora; se quedó con la mejor.',
+                    'aviso')
+            else:
+                log('No se pudo reemplazar el archivo; se conserva la '
+                    'descarga anterior.', 'aviso')
+            return final if final.exists() else archivo
+        try:
+            archivo2.unlink()
+        except OSError:
+            pass
+        log(f'YouTube sigue sin ofrecer {pedida}k; se conserva la '
+            f'descarga (~{int(round(fuente1))}k).', 'gris')
+        return archivo
+    finally:
+        _ANTI_BOT['combo'] = 0
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # ------------------------------------------- anti-bloqueo de YouTube (v2.9)
@@ -1689,6 +1816,19 @@ if TK_OK:
                     elif tipo == 'estimacion':
                         self.lbl_estimacion.configure(
                             text=ev[1], fg=TEMAS[self._tema_actual]['acento'])
+                    elif tipo == 'preguntar':
+                        # v2.14: el hilo de descarga pide una decision al
+                        # usuario (reintentar con calidad mas baja). La
+                        # respuesta viaja por la cola que trae el evento.
+                        _, titulo, texto, resp = ev
+                        try:
+                            r = messagebox.askyesno(titulo, texto)
+                        except Exception:
+                            r = False
+                        try:
+                            resp.put_nowait(bool(r))
+                        except Exception:
+                            pass
                     elif tipo == 'fin':
                         self._fin_tarea(ev[1], ev[2], ev[3] if len(ev) > 3 else '')
             except queue.Empty:
@@ -1963,7 +2103,8 @@ if TK_OK:
                             'playlist. La URL no se ha borrado por si '
                             'quieres reintentarlo.'))
                     return
-                archivo = self._descargar_una(sin_playlist(url)[0], clave,
+                url_unica = sin_playlist(url)[0]
+                archivo = self._descargar_una(url_unica, clave,
                                               calidad_arg, embeber, destino,
                                               cola)
                 if archivo and Path(archivo).exists():
@@ -1974,6 +2115,12 @@ if TK_OK:
                         tam = '?'
                     log(f'✔ ¡Listo!  {archivo.name}  ({tam})'
                         f'{texto_calidad(clave, calidad_arg)}', 'ok')
+                    # v2.14: si quedo con calidad mas baja que la pedida,
+                    # preguntar si se reintenta por otras vias (quedara
+                    # con la mejor de las dos) o se conserva esta.
+                    archivo = reintento_calidad(
+                        self, url_unica, clave, calidad_arg, embeber,
+                        destino, archivo, cola)
                     log(f'Carpeta: {archivo.parent}', 'gris')
                     cola.put(('fin', 'descarga', True, ''))
                 else:

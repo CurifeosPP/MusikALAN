@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.13  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.14  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,18 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.14: reintento de calidad. Si una canción se descargó con una
+fuente claramente más baja que la calidad seleccionada (p. ej. ~64k cuando
+pediste 128k), la app lo dice y te pregunta: «¿Lo intento de nuevo?».
+  SÍ  → vuelve a bajar la canción por otras vías (otros clientes de
+        YouTube, que a veces tienen mejores fuentes) a una carpeta
+        temporal y se queda con la MEJOR de las dos descargas. Si el
+        reintento falla, tu primera descarga no se toca. Si consigue la
+        calidad pedida, avisa con «✔ ¡Ahora sí!».
+  NO  → se conserva la descarga tal cual.
+Solo pregunta en descargas sueltas (en una playlist sería una ventana
+por canción); ahí el mensaje final sigue indicando la calidad.
 
 Novedades v2.13: adiós a los avisos amarillos que asustaban. YouTube emite
 siempre tres avisos técnicos informativos (experimentos SABR y PO Token) que
