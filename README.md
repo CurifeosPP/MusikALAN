@@ -37,6 +37,13 @@ descargas.
   *faststart*, como lo escribe iTunes): FFmpeg las deja al final, detrás
   del audio, y los reproductores básicos solo escanean la cabecera, por
   eso mostraban "unknown" en AAC aunque el MP3 se viera bien
+- **Anti-bloqueo de YouTube (v2.9)**: ante "Sign in to confirm you're not
+  a bot" o HTTP 429 (wifi compartido, VPN o muchas descargas seguidas), la
+  app descarga por los clientes de las apps móviles (android/ios/mweb),
+  reintenta sola una vez por otra vía interna y ofrece un desplegable
+  «Si YouTube bloquea:» para usar las **cookies del navegador** (Firefox,
+  Chrome, Edge, Brave, Opera o Vivaldi) — la vía oficial que desbloquea
+  cualquier red con la sesión abierta
 - **Estimación de tamaño** antes de descargar (por duración del video)
 - **Comprobador de calidad de carpeta** con ffprobe: lista bitrate, duración y
   tamaño de cada archivo y marca los de bitrate bajo

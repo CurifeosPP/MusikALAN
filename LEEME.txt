@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.8  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.9  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,19 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.9: anti-bloqueo de YouTube. Cuando YouTube desconfía de
+una red (wifi compartido, datos móviles, VPN o muchas descargas
+seguidas) responde "Sign in to confirm you're not a bot" o error 429
+y no deja descargar. Ahora la app se defiende en tres capas: (1) las
+descargas se piden con los clientes de las apps móviles (android/ios),
+que ese chequeo no los afecta en la mayoría de las redes; (2) si aun
+así YouTube insiste, la descarga se reintenta sola una vez por otra
+vía interna; y (3) si la red está marcada, un desplegable nuevo
+«Si YouTube bloquea:» permite usar las cookies de tu navegador
+(Firefox, Chrome, Edge, Brave, Opera o Vivaldi): con tu sesión abierta
+YouTube deja de pedir verificación. Es la solución oficial y la que
+siempre funciona.
 
 Novedades v2.8: el AAC (.m4a) por fin muestra artista y álbum en el
 reproductor. El archivo YA estaba bien etiquetado (v2.7), pero FFmpeg

@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.8'
+APP_V = '2.9'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -147,6 +147,7 @@ AJUSTES_DEFECTO = {
     'formato': 'AAC',
     'calidad': '128k',
     'embeber': True,
+    'cookies': '',    # v2.9: navegador cuyas cookies usar si YouTube bloquea
 }
 
 
@@ -398,6 +399,47 @@ def hooks_gui(cola):
     return progreso, postproceso
 
 
+# ------------------------------------------- anti-bloqueo de YouTube (v2.9)
+# Cuando YouTube desconfía de una red (wifi compartido, datos móviles, VPN
+# o muchas descargas seguidas) responde a los clientes web con "Sign in to
+# confirm you're not a bot" o HTTP 429. Defensa en capas:
+#   1) Por defecto los formatos se piden con los clientes de las APPS
+#      móviles (android/ios/mweb), que en la mayoría de las redes no pasan
+#      por ese chequeo.
+#   2) Si aun así YouTube insiste, la descarga se reintenta UNA vez sola
+#      con el combo 2 (android_vr/android/ios, sin clientes web) tras una
+#      pequeña pausa para dejar enfriar el 429.
+#   3) Última línea: el desplegable "Si YouTube bloquea:" permite usar las
+#      COOKIES del navegador del usuario (con sesión abierta YouTube no
+#      pide verificación). Es la vía oficial recomendada por yt-dlp.
+COMBOS_ANTI_BOT = (
+    ('android', 'ios', 'mweb'),
+    ('android_vr', 'android', 'ios'),
+)
+NAVEGADORES_COOKIES = ('firefox', 'chrome', 'edge', 'brave', 'opera',
+                       'vivaldi')
+_ANTI_BOT = {'combo': 0}      # combo en curso (dict mutable = global)
+
+
+def _anti_bot(o):
+    """Inyecta en las opciones de yt-dlp la vía anti-bloqueo en curso."""
+    o['extractor_args'] = {'youtube': {'player_client':
+                          list(COMBOS_ANTI_BOT[_ANTI_BOT['combo']])}}
+    o['forceipv4'] = True
+    navegador = str(AJUSTES.get('cookies', '') or '').strip().lower()
+    if navegador in NAVEGADORES_COOKIES:
+        o['cookiesfrombrowser'] = (navegador,)
+    return o
+
+
+def _es_bloqueo_bot(texto):
+    """True si el error de yt-dlp es el chequeo anti-bot o un 429."""
+    t = (texto or '').lower()
+    return ('not a bot' in t or 'sign in to confirm' in t
+            or 'too many requests' in t or 'http error 429' in t
+            or ' error 429' in t)
+
+
 # ---------------------------------------------------------------- opciones
 def opts_base(carpeta, cola):
     progreso, postproceso = hooks_gui(cola)
@@ -420,6 +462,7 @@ def opts_base(carpeta, cola):
     }
     if FFMPEG:
         o['ffmpeg_location'] = str(FFMPEG.parent)
+    _anti_bot(o)
     return o
 
 
@@ -1239,6 +1282,20 @@ if TK_OK:
                 relief='flat', highlightthickness=0, bd=0)
             self.chk_embeber.grid(row=3, column=0, columnspan=2,
                                   sticky='ew', padx=8, pady=(2, 6))
+            # v2.9: vía anti-bloqueo (cookies del navegador si YouTube
+            # pide verificación)
+            self._wg['lbl_cookies'] = tk.Label(
+                gf, text='Si YouTube bloquea:', font=FUENTE_UI)
+            self._wg['lbl_cookies'].grid(row=4, column=0, sticky='w',
+                                         padx=8, pady=5)
+            self.cmb_cookies = ttk.Combobox(
+                gf, values=(['Automático (recomendado)']
+                            + ['Usar cookies de ' + n.capitalize()
+                               for n in NAVEGADORES_COOKIES]),
+                state='readonly', font=FUENTE_UI, style='gx.TCombobox')
+            self.cmb_cookies.grid(row=4, column=1, sticky='ew',
+                                  padx=8, pady=5, ipady=2)
+            self.cmb_cookies.set('Automático (recomendado)')
 
             # --- grupo: estimación ----------------------------------------
             ge = tk.LabelFrame(marco, text='Estimación', font=FUENTE_UI,
@@ -1295,6 +1352,12 @@ if TK_OK:
                 fmt = 'AAC'
             self.cmb_formato.set(FORMATOS[fmt]['texto'])
             self._recargar_calidades(fmt, AJUSTES.get('calidad'))
+            cookies = str(AJUSTES.get('cookies', '') or '').strip().lower()
+            if cookies in NAVEGADORES_COOKIES:
+                self.cmb_cookies.set('Usar cookies de '
+                                     + cookies.capitalize())
+            else:
+                self.cmb_cookies.set('Automático (recomendado)')
 
         # ------------------------------------------------ helpers widgets
         def _boton(self, padre, texto, cmd, width=None, fuente=FUENTE_BTN,
@@ -1458,6 +1521,10 @@ if TK_OK:
             AJUSTES['calidad'] = self.cmb_calidad.get()
             AJUSTES['embeber'] = bool(self.var_embeber.get())
             AJUSTES['destino'] = self.ent_carpeta.get().strip()
+            val = self.cmb_cookies.get()
+            AJUSTES['cookies'] = ('' if val.startswith('Automático') else
+                                  val.replace('Usar cookies de ', '')
+                                  .strip().lower())
             guardar_ajustes()
 
         def _on_carpeta_escrita(self, _e=None):
@@ -1666,6 +1733,7 @@ if TK_OK:
                 log('Obteniendo información del video...', 'gris')
                 o = {'quiet': True, 'no_warnings': True, 'noplaylist': True,
                      'socket_timeout': 30, 'logger': REGISTRO}
+                _anti_bot(o)
                 if es_url_playlist(cfg['url']):
                     log('(la URL contiene una playlist: la estimación es '
                         'solo del video pegado)', 'gris')
@@ -1720,6 +1788,7 @@ if TK_OK:
             o = {'quiet': True, 'no_warnings': True,
                  'extract_flat': 'in_playlist', 'socket_timeout': 30,
                  'logger': REGISTRO}
+            _anti_bot(o)
             with YT_DLP.YoutubeDL(o) as ydl:
                 info = ydl.extract_info(url, download=False)
             entradas = list(info.get('entries') or [])
@@ -1749,6 +1818,10 @@ if TK_OK:
                     archivo = self._descargar_una(u, clave, calidad_arg,
                                                   embeber, destino, cola)
                 except Exception as e2:
+                    if _es_bloqueo_bot(str(e2)):
+                        # bloqueo anti-bot: abortar para que el reintento
+                        # automático de _hilo_descargar se encargue
+                        raise
                     archivo = None
                     log(f'✖ [{i + 1}/{total}] Falló: {self._msg_error(e2)}',
                         'error')
@@ -1828,10 +1901,34 @@ if TK_OK:
                 if nombre_exc == 'DownloadError':
                     lineas = [l for l in str(e).strip().splitlines() if l.strip()]
                     msg = lineas[0][:300] if lineas else 'error desconocido'
-                    log('✖ No se pudo descargar: ' + msg, 'error')
-                    log('Consejos: revisa la URL y tu conexión; si YouTube '
-                        'cambió algo, pulsa Ctrl+U (actualizar yt-dlp) y '
-                        'reintenta.', 'gris')
+                    if _es_bloqueo_bot(str(e)):
+                        if _ANTI_BOT['combo'] == 0:
+                            log('YouTube está pidiendo verificación '
+                                'anti-bot para esta red. Reintentando con '
+                                'una vía interna alternativa...', 'aviso')
+                            _ANTI_BOT['combo'] = 1
+                            try:
+                                time.sleep(3)   # respiro para el 429
+                                self._hilo_descargar(cfg)
+                                return
+                            finally:
+                                _ANTI_BOT['combo'] = 0
+                        log('✖ YouTube sigue pidiendo verificación: '
+                            + msg, 'error')
+                        log('Solución fiable: en «Si YouTube bloquea:» '
+                            'elige Usar cookies de Firefox (o tu '
+                            'navegador) y reintenta: con tu sesión '
+                            'abierta YouTube no vuelve a pedir '
+                            'verificación.', 'gris')
+                        log('También suelen funcionar: esperar unos '
+                            'minutos, pulsar Ctrl+U (actualizar yt-dlp) '
+                            'o probar con otra red (el wifi de casa).',
+                            'gris')
+                    else:
+                        log('✖ No se pudo descargar: ' + msg, 'error')
+                        log('Consejos: revisa la URL y tu conexión; si '
+                            'YouTube cambió algo, pulsa Ctrl+U '
+                            '(actualizar yt-dlp) y reintenta.', 'gris')
                 else:
                     log(f'✖ Error inesperado ({nombre_exc}): {e}', 'error')
                     tb = traceback.format_exc(limit=3)
