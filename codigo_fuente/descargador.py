@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.12'
+APP_V = '2.13'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -303,8 +303,21 @@ class Registro:
     def debug(self, m):
         pass
 
-    # Avisos internos de yt-dlp que solo meten ruido en el registro:
-    AVISOS_RUIDOSOS = ('No supported JavaScript runtime', 'EJS')
+    # Avisos internos de yt-dlp que solo meten ruido en el registro.
+    # v2.13: YouTube emite tres avisos INFORMATIVOS en casi todas las
+    # descargas (experimentos SABR y del PO Token). No impiden bajar la
+    # cancion -- los formatos de android/ios siguen funcionando -- pero
+    # escritos en amarillo asustan: parece que algo salio mal cuando en
+    # realidad todo fue bien. Se quedan fuera del registro:
+    AVISOS_RUIDOSOS = (
+        'No supported JavaScript runtime', 'EJS',
+        # "... YouTube may have enabled the SABR-only streaming experiment..."
+        'SABR',
+        # "Some android/ios/tv client https formats have been skipped..."
+        'formats have been skipped',
+        # "mweb client https formats require a GVS PO Token..."
+        'PO Token',
+    )
 
     def warning(self, m):
         m = str(m).strip()

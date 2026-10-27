@@ -55,6 +55,10 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **Sin avisos que asusten (v2.13)**: los tres avisos técnicos informativos
+  de YouTube (SABR, formatos saltados, PO Token) que salían en amarillo en
+  casi todas las descargas —pareciendo un error cuando todo fue bien— ya no
+  se muestran; los avisos y errores de verdad siguen visibles
 - **Registro limpio + calidad real + botón Pegar (v2.12)**: los pasos
   internos se ven solo en la barra de progreso; el mensaje final indica si
   se consiguió la calidad seleccionada (p. ej. «AAC 128k») o si YouTube solo

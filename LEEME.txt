@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.12  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.13  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,13 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.13: adiós a los avisos amarillos que asustaban. YouTube emite
+siempre tres avisos técnicos informativos (experimentos SABR y PO Token) que
+se escribían en amarillo en el registro y parecían un error, aunque la
+descarga terminara perfectamente. Ya no aparecen: el registro queda limpio
+(título, progreso y resultado). Si de verdad hay un problema, ese aviso sí
+que se muestra.
 
 Novedades v2.12: registro más limpio, calidad real y botón «Pegar».
 Los pasos internos (convertir el audio, escribir etiquetas, portada…)
