@@ -55,6 +55,10 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **La app se renueva con el instalador (v2.11)**: el programa embebido se
+  restaura del .bat en cada arranque, así que la versión de la ventana
+  coincide siempre con la del instalador (en la v2.10, quien ya tenía una
+  instalación vieja seguía viendo la app antigua aunque bajara el .bat nuevo)
 - **Auto-actualización (v2.10)**: al arrancar, el .bat consulta la última
   release en GitHub; si hay una versión mayor, se descarga, se valida
   (tamaño, payload y versión), **borra solo el programa viejo conservando

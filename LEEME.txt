@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.9  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.11  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,17 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.11: corrección de la actualización de la app. En la v2.10
+el instalador ya se actualizaba solo, pero quedaba un caso roto: si en
+el ordenador ya había una instalación antigua (por ejemplo la v2.8), al
+abrir el .bat nuevo se seguía ejecutando el programa viejo y la ventana
+seguía mostrando la versión anterior ("descargué la 2.10 y me sale la
+2.8"). Ahora la aplicación se restaura del instalador en CADA arranque:
+la versión de la ventana coincide siempre con la del .bat, y se
+conserva todo (Python, FFmpeg, yt-dlp/mutagen y tus ajustes). Si te
+pasaba eso, basta con descargar el .bat de la v2.11 y abrirlo una vez;
+a partir de ahí, las siguientes versiones se instalarán solas.
 
 Novedades v2.10: el instalador se actualiza solo. Al arrancar, el .bat
 consulta en GitHub si hay una versión más nueva de MusikALAN; si la

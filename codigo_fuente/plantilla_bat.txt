@@ -19,17 +19,20 @@ rem  Requisitos: Windows 10 1803 o superior. Internet solo la primera vez.
 rem  Desde la v2.4 todo se instala en %APPDATA%\MusikALAN aunque el .bat
 rem  este en Descargas; una instalacion vieja junto al .bat se mueve sola.
 rem  Desde la v2.10 el .bat se auto-actualiza solo al arrancar.
+rem  Desde la v2.11 la aplicacion se restaura del instalador en CADA
+rem  arranque, asi que basta con abrir un .bat nuevo para tener la app
+rem  nueva (se conserva todo: Python, FFmpeg, yt-dlp y tus ajustes).
 rem  Parametros opcionales:
-rem     --reinstalar   vuelve a extraer descargador.py
+rem     --reinstalar   fuerza a re-extraer descargador.py (ya no hace falta)
 rem     --sin-buscar   se salta la comprobacion de actualizaciones
 rem  NOTA: este archivo debe ser ASCII puro y CRLF (no tocar a mano).
 rem ================================================================
 setlocal EnableExtensions
-title MusikALAN v2.10
+title MusikALAN v2.11
 rem  Marca de version: la busca este mismo archivo con findstr para
 rem  compararse con la ultima release publicada en GitHub.
 rem  NO cambiar el formato de la linea siguiente.
-rem VERSION-BUSCABLE: 2.10
+rem VERSION-BUSCABLE: 2.11
 cd /d "%~dp0"
 set "SELF=%~f0"
 set "V_LOCAL=0"
@@ -91,7 +94,7 @@ echo  %C_TIT%^| ^|\/^| ^| ^|_^| \__ \^| ^|^| ' ^<  / _ \^| ^|__ / _ \^| .` ^|%C_
 echo  %C_TIT%^|_^|  ^|_^|\___/^|___/___^|_^|\_\/_/ \_\____/_/ \_\_^|\_^|%C_FIN%
 echo.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
-echo    %C_TIT%MusikALAN v2.10%C_FIN% - preparando el entorno
+echo    %C_TIT%MusikALAN v2.11%C_FIN% - preparando el entorno
 echo    Instalador portable: no pide permisos de administrador.
 echo    Si falta algo (Python, yt-dlp, FFmpeg) se descarga e instala aqui.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
@@ -122,18 +125,23 @@ if exist "%~dp0_instalacion_tmp" rmdir /s /q "%~dp0_instalacion_tmp" 2>nul
 
 echo  %C_INFO%[2/6]%C_FIN% %C_TIT%Preparando la aplicacion%C_FIN% (script embebido)...
 if "%~1"=="--reinstalar" if exist "%SCRIPT%" del /q "%SCRIPT%"
-if exist "%SCRIPT%" goto script_listo
+rem  Desde la v2.11 el script se restaura SIEMPRE del instalador, sin
+rem  mirar si ya existia una copia en la carpeta de datos. Antes se
+rem  saltaba este paso si descargador.py ya estaba, y por eso quien
+rem  tenia una version antigua de la app seguia viendola aunque bajara
+rem  o recibiera el instalador nuevo.
 for /f "tokens=1 delims=:" %%a in ('findstr /b /c:":::" "%~f0"') do >>"%TMPDIR%\payload.b64" echo(%%a
 certutil -f -decode "%TMPDIR%\payload.b64" "%SCRIPT%" >nul 2>nul
 if errorlevel 1 goto err_payload
 del /q "%TMPDIR%\payload.b64" >nul 2>nul
-echo    %C_OK%OK%C_FIN% descargador.py restaurado del instalador.
+echo    %C_OK%OK%C_FIN% aplicacion restaurada, version v%V_LOCAL% (la misma que este instalador).
 goto script_listo
 
 :err_payload
 echo    %C_ERR%ERROR%C_FIN% no se pudo extraer el script embebido.
-echo    Vuelve a descargar el archivo DescargadorMusica.bat completo
-echo    (se pudo cortar al copiarlo o enviarlo).
+echo    Si la aplicacion esta abierta, cierrala y vuelve a ejecutar
+echo    este archivo. Si aun asi falla, vuelve a descargar el archivo
+echo    DescargadorMusica.bat completo (se pudo cortar al copiarlo).
 goto fin_error
 
 :script_listo
@@ -235,7 +243,7 @@ echo   La musica se guarda en tu carpeta de Musica.
 echo   La ventana de descargas se abre a continuacion.
 echo   %C_GRI%--------------------------------------------------------------------%C_FIN%
 echo.
-title MusikALAN v2.10 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
+title MusikALAN v2.11 - YouTube a AAC/MP3/FLAC/WAV/WMA/AVI
 if defined GUIEXE goto lanzar_gui
 echo    %C_AVI%Aviso%C_FIN% este equipo no ofrece ventana independiente;
 echo    deja esta consola abierta mientras uses el programa.
