@@ -63,7 +63,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 
-APP_V = '2.14'
+APP_V = '2.15'
 APP_DIR = Path(__file__).resolve().parent
 RUTA_AJUSTES = APP_DIR / 'ajustes.json'
 LOG_ERRORES = APP_DIR / 'descargador_errores.log'
@@ -607,9 +607,14 @@ _ANTI_BOT = {'combo': 0}      # combo en curso (dict mutable = global)
 
 def _anti_bot(o):
     """Inyecta en las opciones de yt-dlp la vía anti-bloqueo en curso."""
-    o['extractor_args'] = {'youtube': {'player_client':
-                          list(COMBOS_ANTI_BOT[_ANTI_BOT['combo']])}}
-    o['forceipv4'] = True
+    combo = _ANTI_BOT['combo']
+    if combo >= 0:
+        o['extractor_args'] = {'youtube': {'player_client':
+                              list(COMBOS_ANTI_BOT[combo])}}
+        o['forceipv4'] = True
+    # v2.15: combo -1 = vía clásica de la v2.8: clientes por defecto de
+    # yt-dlp, sin forzar clientes móviles ni IPv4 (las cookies, si el
+    # usuario las eligió, se siguen usando: son decisión explícita suya).
     navegador = str(AJUSTES.get('cookies', '') or '').strip().lower()
     if navegador in NAVEGADORES_COOKIES:
         o['cookiesfrombrowser'] = (navegador,)
@@ -622,6 +627,79 @@ def _es_bloqueo_bot(texto):
     return ('not a bot' in t or 'sign in to confirm' in t
             or 'too many requests' in t or 'http error 429' in t
             or ' error 429' in t)
+
+
+def _es_restriccion_edad(texto):
+    """v2.15: True si el error indica que el video tiene restricción de
+    edad. El mensaje de YouTube es parecido al del chequeo anti-bot
+    ('Sign in to confirm your age'), pero la solución es distinta:
+    reintentar por otras vías NO sirve (ninguna vía anónima pasa el
+    control de edad); hay que usar cookies con sesión abierta o, como
+    pide la app, buscar otra versión del video sin la restricción."""
+    t = (texto or '').lower()
+    return ('confirm your age' in t or 'age-restricted' in t
+            or 'age restricted' in t
+            or 'inappropriate for some users' in t)
+
+
+# ------------------------------------------------- escalera de reintentos
+# v2.15: si una descarga suelta falla, se prueba automáticamente por
+# varias vías (siempre pidiendo la calidad seleccionada) antes de dar el
+# fallo por definitivo:
+#   1) la vía clásica de la v2.8: clientes por defecto de yt-dlp
+#   2) los clientes móviles de la v2.9: android/ios/mweb
+#   3) la vía sin clientes web de la v2.9: android_vr/android/ios
+# Si YouTube pide confirmación (bot/429) se pasa a la vía siguiente. Si
+# el video tiene restricción de edad, la escalera se corta: ninguna vía
+# anónima la pasa.
+ESCALERA_VIAS = (
+    (-1, 'la vía clásica (como la v2.8)'),
+    (0, 'los clientes móviles (android/ios)'),
+    (1, 'la vía interna alternativa (android_vr)'),
+)
+
+
+def descarga_con_escalera(self, url, clave, calidad_arg, embeber, destino,
+                          cola):
+    """v2.15: intenta la descarga por las vías de ESCALERA_VIAS en orden
+    hasta que una salga, siempre pidiendo la calidad seleccionada.
+    Devuelve (archivo|None, clase|None, mensaje) donde clase None =
+    éxito, 'edad' = restricción de edad, 'bot' = YouTube pidió
+    verificación por todas las vías, 'otro' = fallo normal."""
+    def log(m, t='info'):
+        cola.put(('log', m, t))
+
+    ultimo = ''
+    try:
+        for i, (modo, nombre) in enumerate(ESCALERA_VIAS):
+            if i:
+                time.sleep(3)   # respiro entre vías (dejar enfriar el 429)
+            _ANTI_BOT['combo'] = modo
+            siguiente = (ESCALERA_VIAS[i + 1][1]
+                         if i + 1 < len(ESCALERA_VIAS) else None)
+            try:
+                archivo = self._descargar_una(url, clave, calidad_arg,
+                                              embeber, destino, cola)
+                if archivo and Path(archivo).exists():
+                    return archivo, None, ''
+                ultimo = 'el archivo final no apareció donde se esperaba'
+            except Exception as e:
+                ultimo = str(e).strip() or type(e).__name__
+                if _es_restriccion_edad(ultimo):
+                    return None, 'edad', ultimo
+                if siguiente:
+                    motivo = ('YouTube pidió confirmación'
+                              if _es_bloqueo_bot(ultimo)
+                              else 'Falló por ' + nombre)
+                    log(motivo + '; probando por ' + siguiente + '...',
+                        'aviso')
+            else:
+                if siguiente:
+                    log('No salió por ' + nombre + '; probando por '
+                        + siguiente + '...', 'aviso')
+        return None, ('bot' if _es_bloqueo_bot(ultimo) else 'otro'), ultimo
+    finally:
+        _ANTI_BOT['combo'] = 0
 
 
 # ---------------------------------------------------------------- opciones
@@ -2040,6 +2118,16 @@ if TK_OK:
                     archivo = self._descargar_una(u, clave, calidad_arg,
                                                   embeber, destino, cola)
                 except Exception as e2:
+                    if _es_restriccion_edad(str(e2)):
+                        # v2.15: video restringido por edad: ninguna vía
+                        # sirve sin sesión abierta. Se salta con aviso
+                        # claro y la lista sigue con las demás canciones.
+                        log(f'✖ [{i + 1}/{total}] {tit}: tiene '
+                            'RESTRICCIÓN DE EDAD; YouTube no deja '
+                            'bajarla sin sesión abierta. Busca otra '
+                            'versión sin la restricción.', 'error')
+                        fallos.append(tit + ' (restricción de edad)')
+                        continue
                     if _es_bloqueo_bot(str(e2)):
                         # bloqueo anti-bot: abortar para que el reintento
                         # automático de _hilo_descargar se encargue
@@ -2104,9 +2192,13 @@ if TK_OK:
                             'quieres reintentarlo.'))
                     return
                 url_unica = sin_playlist(url)[0]
-                archivo = self._descargar_una(url_unica, clave,
-                                              calidad_arg, embeber, destino,
-                                              cola)
+                # v2.15: escalera automática de reintentos: primero la
+                # vía clásica de la v2.8; si YouTube pide confirmación,
+                # las vías móviles de la v2.9. La restricción de edad se
+                # detecta aparte (reintentar no sirve) con su aviso.
+                archivo, clase, msg_err = descarga_con_escalera(
+                    self, url_unica, clave, calidad_arg, embeber, destino,
+                    cola)
                 if archivo and Path(archivo).exists():
                     archivo = Path(archivo)
                     try:
@@ -2123,10 +2215,47 @@ if TK_OK:
                         destino, archivo, cola)
                     log(f'Carpeta: {archivo.parent}', 'gris')
                     cola.put(('fin', 'descarga', True, ''))
+                elif clase == 'edad':
+                    log('✖ No se puede descargar: el video tiene '
+                        'RESTRICCIÓN DE EDAD. No es un fallo de la '
+                        'app: YouTube no deja bajar ese video sin una '
+                        'sesión abierta.', 'error')
+                    log('Qué hacer: busca otra versión de la canción '
+                        'sin restricción de edad (lyric video, radio '
+                        'edit, otro canal) y descarga esa.', 'gris')
+                    log('Si tienes sesión abierta en tu navegador, '
+                        'elige «Usar cookies de ...» en «Si YouTube '
+                        'bloquea:» y vuelve a intentarlo: con tu sesión '
+                        'abierta YouTube suele dejar descargarlo.',
+                        'gris')
+                    cola.put(('fin', 'descarga', False,
+                              'El video tiene restricción de edad: no se '
+                              'puede descargar. Busca otro video sin la '
+                              'restricción.'))
+                elif clase == 'bot':
+                    log('✖ YouTube pidió verificación por todas las '
+                        'vías: ' + (msg_err or '')[:250], 'error')
+                    log('Solución fiable: en «Si YouTube bloquea:» '
+                        'elige Usar cookies de Firefox (o tu navegador) '
+                        'y reintenta: con tu sesión abierta YouTube no '
+                        'vuelve a pedir verificación.', 'gris')
+                    log('También suelen funcionar: esperar unos '
+                        'minutos, pulsar Ctrl+U (actualizar yt-dlp) o '
+                        'probar con otra red (el wifi de casa).', 'gris')
+                    cola.put(('fin', 'descarga', False,
+                              'No se pudo completar la descarga '
+                              '(verificación de YouTube). Revisa el '
+                              'registro.'))
                 else:
-                    log('El archivo final no apareció donde se esperaba.',
-                        'error')
-                    cola.put(('fin', 'descarga', False, ''))
+                    log('✖ No se pudo descargar: ' + (msg_err or '')
+                        [:250], 'error')
+                    log('Se probó automáticamente por todas las vías '
+                        'internas. Consejos: revisa la URL y tu '
+                        'conexión; si YouTube cambió algo, pulsa Ctrl+U '
+                        '(actualizar yt-dlp) y reintenta.', 'gris')
+                    cola.put(('fin', 'descarga', False,
+                              'No se pudo completar la descarga. Revisa '
+                              'el registro para más detalles.'))
             except Exception as e:
                 nombre_exc = type(e).__name__
                 if nombre_exc == 'DownloadError':

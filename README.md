@@ -55,6 +55,13 @@ descargas.
   reserva) dentro de `%APPDATA%\Roaming\MusikALAN` (desde la v2.4; aunque el
   .bat esté en Descargas, y con **migración automática** de una instalación
   anterior situada junto al .bat)
+- **Reintentos automáticos + aviso de restricción de edad (v2.15)**: si una
+  descarga falla, se reintenta sola por 3 vías (clásica v2.8 → móviles
+  android/ios → alternativa android_vr), siempre pidiendo la calidad
+  seleccionada. Si el video tiene restricción de edad, avisa con claridad
+  (no es un fallo de la app), sugiere buscar otra versión sin restricción
+  y recuerda el truco de las cookies; en playlists esa canción se salta y
+  la lista sigue
 - **Reintento de calidad (v2.14)**: si la canción quedó con una fuente
   claramente más baja que la seleccionada (~64k de 128k), la app pregunta
   «¿Lo intento de nuevo?»: reintenta por otras vías a una carpeta temporal

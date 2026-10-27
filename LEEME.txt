@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-  MUSIKALAN v2.14  —  YouTube Downloader (ventana)
+  MUSIKALAN v2.15  —  YouTube Downloader (ventana)
                   AAC · MP3 · FLAC · WAV · WMA
                   AVI para sheiju 1.8" 128x160
 ══════════════════════════════════════════════════════════════════
@@ -12,6 +12,21 @@ permisos de administrador) y luego abre la ventana "MusikALAN": una
 interfaz gráfica con tema oscuro, desplegables de
 formato y calidad, soporte de playlists, estimación de tamaño, barra
 de progreso y registro de actividad.
+
+Novedades v2.15: reintentos automáticos y aviso claro de restricción de
+edad. Si una descarga falla, la app lo intenta sola por varias vías (y
+siempre pidiendo la calidad seleccionada): primero por la vía clásica de
+la v2.8 (clientes por defecto de yt-dlp); si YouTube pide confirmación,
+por los clientes móviles (android/ios); y si insistiera, por la vía
+interna alternativa (android_vr). Solo da el fallo por definitivo cuando
+ha probado todas. Y si el video tiene RESTRICCIÓN DE EDAD (como el caso
+«Video con restricción de edad» de YouTube), no reintentan en balde: la
+app avisa con claridad que no puede bajarlo —no es un fallo de la app,
+YouTube no deja verlo sin sesión abierta—, sugiere buscar otra versión
+del video sin la restricción (lyric, radio edit, otro canal) y recuerda
+que con «Usar cookies de tu navegador» (sesión abierta) suele dejarse
+descargar. En playlists, la canción restringida se salta con su aviso y
+el resto de la lista sigue.
 
 Novedades v2.14: reintento de calidad. Si una canción se descargó con una
 fuente claramente más baja que la calidad seleccionada (p. ej. ~64k cuando
